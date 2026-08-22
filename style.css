@@ -1,9 +1,10 @@
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; min-height: 100%; }
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: #0d0f12;
   color: #f5f5f5;
+  -webkit-font-smoothing: antialiased;
 }
 button {
   border: 0;
@@ -12,8 +13,10 @@ button {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity .15s;
+  transition: opacity .15s, transform .1s;
+  -webkit-appearance: none;
 }
+button:active:not(:disabled) { transform: scale(.97); }
 button:hover:not(:disabled) { opacity: .9; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .primary { background: #fff; color: #111; }
@@ -47,20 +50,38 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   gap: 24px;
 }
 
+/* --- ВИДЕО (кросс-браузер) --- */
+.video-wrapper {
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+}
 .video-container {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  height: 0;
+  padding-bottom: 56.25%;
   background: #000;
-  border-radius: 14px;
-  overflow: hidden;
 }
-video {
-  display: block;
+.video-container video {
+  position: absolute;
+  top: 0; left: 0;
   width: 100%; height: 100%;
+  display: block;
   object-fit: contain;
   background: #000;
 }
+/* Safari / iOS fixes */
+video::-webkit-media-controls-panel {
+  background: rgba(0,0,0,.6) !important;
+}
+video::-webkit-media-controls-current-time-display,
+video::-webkit-media-controls-time-remaining-display {
+  font-family: system-ui, sans-serif !important;
+}
+
 .video-message {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -69,69 +90,72 @@ video {
   text-align: center;
   pointer-events: none;
   transition: opacity .2s;
+  z-index: 3;
 }
 .video-message.hidden { opacity: 0; }
 
 /* --- УКАЗКА --- */
 .pointer-overlay {
-  position: absolute;
-  inset: 0;
+  position: absolute; inset: 0;
   pointer-events: none;
   z-index: 5;
+  overflow: hidden;
 }
 .pointer-cursor {
   position: absolute;
   pointer-events: none;
   z-index: 6;
-  transition: left .08s linear, top .08s linear;
+  transition: left .06s linear, top .06s linear;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  will-change: left, top;
 }
 .cursor-icon {
-  width: 20px;
-  height: 20px;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,.8));
+  width: 18px;
+  height: 18px;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.9));
 }
 .cursor-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: #fff;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
   white-space: nowrap;
-  margin-top: 2px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.5);
+  margin-top: 1px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  letter-spacing: .3px;
 }
+
 .pointer-toggle {
   position: absolute;
   top: 10px;
   left: 10px;
-  z-index: 10;
-  background: rgba(0,0,0,.55);
-  border: 1px solid rgba(255,255,255,.18);
+  z-index: 20;
+  background: rgba(30,30,35,.85);
+  border: 1px solid rgba(255,255,255,.15);
   color: #fff;
-  padding: 7px 9px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity .2s, background .2s, transform .15s;
-  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.video-container:hover .pointer-toggle {
-  opacity: 1;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background .2s, transform .15s, box-shadow .2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
 }
 .pointer-toggle:hover {
-  background: rgba(0,0,0,.8);
-  transform: scale(1.05);
+  background: rgba(50,50,60,.95);
+  transform: scale(1.06);
 }
 .pointer-toggle.active {
-  background: rgba(255,255,255,.92);
+  background: rgba(255,255,255,.95);
   color: #111;
   border-color: rgba(255,255,255,.9);
+  box-shadow: 0 0 12px rgba(255,255,255,.25);
 }
 
 .episode-panel {
@@ -171,9 +195,9 @@ video {
   background: #090b0e;
   border-radius: 9px;
   text-align: center;
-  font-family: monospace;
-  font-size: 24px;
-  letter-spacing: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 22px;
+  letter-spacing: 3px;
 }
 #participants { display: flex; flex-direction: column; gap: 7px; }
 .participant {
@@ -204,6 +228,7 @@ video {
   font-size: 14px;
   flex: 1;
   outline: none;
+  -webkit-appearance: none;
 }
 .dark-input:focus { border-color: #555; }
 .dark-select {
@@ -216,12 +241,13 @@ video {
   font-weight: 600;
   cursor: pointer;
   outline: none;
+  -webkit-appearance: none;
 }
 .dark-select:focus { border-color: #555; }
 .dark-select:disabled { opacity: .45; cursor: not-allowed; }
 
 .uid-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.uid-code { background: #090b0e; padding: 4px 8px; border-radius: 5px; font-size: 12px; word-break: break-all; color: #e3b341; }
+.uid-code { background: #090b0e; padding: 4px 8px; border-radius: 5px; font-size: 12px; word-break: break-all; color: #e3b341; font-family: ui-monospace, monospace; }
 
 .friends-list, .invites-list, .friends-list-modal {
   display: flex;
@@ -251,6 +277,7 @@ video {
   pointer-events: none;
   transition: opacity .2s, transform .2s;
   z-index: 200;
+  font-weight: 500;
 }
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }
 
