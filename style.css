@@ -24,9 +24,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .app { min-height: 100vh; }
 .header {
   min-height: 70px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   gap: 20px;
   padding: 14px 24px;
   border-bottom: 1px solid #292d34;
@@ -73,6 +71,68 @@ video {
   transition: opacity .2s;
 }
 .video-message.hidden { opacity: 0; }
+
+/* --- УКАЗКА --- */
+.pointer-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.pointer-cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 6;
+  transition: left .08s linear, top .08s linear;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.cursor-icon {
+  width: 20px;
+  height: 20px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.8));
+}
+.cursor-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  margin-top: 2px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.5);
+}
+.pointer-toggle {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  background: rgba(0,0,0,.55);
+  border: 1px solid rgba(255,255,255,.18);
+  color: #fff;
+  padding: 7px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .2s, background .2s, transform .15s;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.video-container:hover .pointer-toggle {
+  opacity: 1;
+}
+.pointer-toggle:hover {
+  background: rgba(0,0,0,.8);
+  transform: scale(1.05);
+}
+.pointer-toggle.active {
+  background: rgba(255,255,255,.92);
+  color: #111;
+  border-color: rgba(255,255,255,.9);
+}
 
 .episode-panel {
   margin-top: 12px;
