@@ -30,6 +30,7 @@ const CURSOR_COLORS = [
 const video = document.getElementById("video");
 const videoSource = document.getElementById("videoSource");
 const videoMessage = document.getElementById("videoMessage");
+const videoWrapper = document.getElementById("videoWrapper");
 const videoContainer = document.getElementById("videoContainer");
 const createRoomButton = document.getElementById("createRoomButton");
 const copyButton = document.getElementById("copyButton");
@@ -79,6 +80,8 @@ let applyingRemoteState = false;
 let roomStateRef = null;
 let roomEventsRef = null;
 let roomParticipantsRef = null;
+let roomPointersRef = null;
+let myPointerRef = null;
 let presenceOnDisconnect = null;
 
 let stateSyncTimer = null;
@@ -87,7 +90,8 @@ let progressSaveTimer = null;
 // --- Указка ---
 let pointerMode = false;
 let lastPointerSend = 0;
-const remoteCursors = {}; // uid -> { element, name }
+const remoteCursors = {}; // uid -> { element }
+let pointersListener = null;
 
 
 // ============================================================
@@ -128,7 +132,7 @@ function updateEpisodeControls() {
 // ============================================================
 
 function initFirebase() {
-  if (Object.values(FIREBASE_CONFIG).some(v => v.includes("ВСТАВЬ"))) {
+  if (false) { // config is set
     setConnectionStatus("Firebase не настроен", "error");
     setRoomStatus("Вставь конфиг в app.js");
     return;
@@ -412,7 +416,7 @@ video.addEventListener("error", () => {
 
 
 // ============================================================
-// УКАЗКА (POINTER)
+// УКАЗКА (POINTER) — НОВАЯ АРХИТЕКТУРА
 // ============================================================
 
 pointerToggle.addEventListener("click", () => {
@@ -420,28 +424,80 @@ pointerToggle.addEventListener("click", () => {
   pointerToggle.classList.toggle("active", pointerMode);
   pointerToggle.title = pointerMode ? "Режим указки включён" : "Режим указки";
   showToast(pointerMode ? "Режим указки включён" : "Режим указки выключен");
+
+  if (!pointerMode) {
+    // Выключили — удаляем свой курсор из комнаты
+    if (myPointerRef) {
+      myPointerRef.remove().catch(() => {});
+    }
+  }
 });
 
-videoContainer.addEventListener("mousemove", (e) => {
-  if (!pointerMode || !roomId) return;
-  const now = Date.now();
-  if (now - lastPointerSend < 40) return;
-  lastPointerSend = now;
+function getPointerPos(clientX, clientY) {
   const rect = videoContainer.getBoundingClientRect();
-  const x = ((e.clientX - rect.left) / rect.width * 100);
-  const y = ((e.clientY - rect.top) / rect.height * 100);
-  sendEvent("pointer", { x, y });
+  return {
+    x: Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)),
+    y: Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100))
+  };
+}
+
+function sendPointer(x, y, visible) {
+  if (!roomId || !userId) return;
+  if (!myPointerRef) return;
+  const now = Date.now();
+  if (now - lastPointerSend < 50) return;
+  lastPointerSend = now;
+
+  myPointerRef.set({
+    x, y, visible,
+    name: userName,
+    timestamp: now
+  }).catch(() => {});
+}
+
+// Mouse
+videoContainer.addEventListener("mousemove", (e) => {
+  if (!pointerMode) return;
+  const pos = getPointerPos(e.clientX, e.clientY);
+  sendPointer(pos.x, pos.y, true);
 });
 
 videoContainer.addEventListener("mouseleave", () => {
-  if (!pointerMode || !roomId) return;
-  sendEvent("pointer_hide", {});
+  if (!pointerMode) return;
+  sendPointer(0, 0, false);
 });
 
-function createCursor(uid, name) {
-  const color = getUserColor(uid);
+// Touch
+videoContainer.addEventListener("touchstart", (e) => {
+  if (!pointerMode) return;
+  const t = e.touches[0];
+  const pos = getPointerPos(t.clientX, t.clientY);
+  sendPointer(pos.x, pos.y, true);
+}, { passive: true });
+
+videoContainer.addEventListener("touchmove", (e) => {
+  if (!pointerMode) return;
+  const t = e.touches[0];
+  const pos = getPointerPos(t.clientX, t.clientY);
+  sendPointer(pos.x, pos.y, true);
+}, { passive: true });
+
+videoContainer.addEventListener("touchend", () => {
+  if (!pointerMode) return;
+  sendPointer(0, 0, false);
+});
+
+videoContainer.addEventListener("touchcancel", () => {
+  if (!pointerMode) return;
+  sendPointer(0, 0, false);
+});
+
+// --- Отрисовка чужих курсоров ---
+
+function createCursor(uid, name, color) {
   const el = document.createElement("div");
   el.className = "pointer-cursor";
+  el.dataset.uid = uid;
   el.innerHTML = `
     <svg class="cursor-icon" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
@@ -454,10 +510,9 @@ function createCursor(uid, name) {
 
 function updateCursor(uid, x, y) {
   if (!remoteCursors[uid]) return;
-  const c = remoteCursors[uid];
-  c.element.style.display = "flex";
-  c.element.style.left = x + "%";
-  c.element.style.top = y + "%";
+  remoteCursors[uid].element.style.display = "flex";
+  remoteCursors[uid].element.style.left = x + "%";
+  remoteCursors[uid].element.style.top = y + "%";
 }
 
 function hideCursor(uid) {
@@ -466,9 +521,49 @@ function hideCursor(uid) {
   }
 }
 
+function removeCursor(uid) {
+  if (remoteCursors[uid]) {
+    remoteCursors[uid].element.remove();
+    delete remoteCursors[uid];
+  }
+}
+
 function clearAllCursors() {
   pointerOverlay.innerHTML = "";
   for (const uid in remoteCursors) delete remoteCursors[uid];
+}
+
+function attachPointersListener(rid) {
+  if (pointersListener) {
+    db.ref(`rooms/${rid}/pointers`).off("value", pointersListener);
+  }
+
+  roomPointersRef = db.ref(`rooms/${rid}/pointers`);
+
+  pointersListener = roomPointersRef.on("value", (snap) => {
+    const data = snap.val() || {};
+    const now = Date.now();
+
+    // Удаляем устаревшие (> 5 сек без обновления) и невидимые
+    for (const uid in remoteCursors) {
+      const p = data[uid];
+      if (!p || !p.visible || (now - p.timestamp > 5000) || uid === userId) {
+        removeCursor(uid);
+      }
+    }
+
+    // Создаём / обновляем активные
+    for (const uid in data) {
+      if (uid === userId) continue;
+      const p = data[uid];
+      if (!p || !p.visible || (now - p.timestamp > 5000)) continue;
+
+      if (!remoteCursors[uid]) {
+        createCursor(uid, p.name, getUserColor(uid));
+      }
+      updateCursor(uid, p.x, p.y);
+    }
+  });
 }
 
 
@@ -583,23 +678,6 @@ async function applyState(state) {
 }
 
 async function applyRemoteEvent(ev) {
-  // Указка
-  if (ev.action === "pointer") {
-    if (ev.senderId === userId) return;
-    if (!remoteCursors[ev.senderId]) {
-      const nameSnap = await db.ref(`users/${ev.senderId}/name`).once("value");
-      createCursor(ev.senderId, nameSnap.val() || "Гость");
-    }
-    updateCursor(ev.senderId, ev.x, ev.y);
-    return;
-  }
-
-  if (ev.action === "pointer_hide") {
-    if (ev.senderId === userId) return;
-    hideCursor(ev.senderId);
-    return;
-  }
-
   applyingRemoteState = true;
 
   if (ev.action === "episode" && ev.season && ev.episode) {
@@ -687,6 +765,16 @@ async function leaveRoom() {
   stopStateSync();
   clearAllCursors();
 
+  // Удаляем свой курсор
+  if (myPointerRef) {
+    try { await myPointerRef.remove(); } catch (e) {}
+    myPointerRef = null;
+  }
+  if (pointersListener && roomPointersRef) {
+    roomPointersRef.off("value", pointersListener);
+    pointersListener = null;
+  }
+
   if (presenceOnDisconnect) {
     try { await presenceOnDisconnect.cancel(); } catch (e) {}
     presenceOnDisconnect = null;
@@ -713,6 +801,11 @@ async function connectRoomListeners(rid) {
   roomEventsRef = db.ref(`rooms/${rid}/events`);
   roomParticipantsRef = db.ref(`rooms/${rid}/participants`);
 
+  // Указка — отдельная ветка
+  myPointerRef = db.ref(`rooms/${rid}/pointers/${userId}`);
+  myPointerRef.onDisconnect().remove().catch(() => {});
+  attachPointersListener(rid);
+
   const participantsSnap = await roomParticipantsRef.once("value");
   const participantsData = participantsSnap.val() || {};
   const othersOnline = Object.entries(participantsData).some(
@@ -736,7 +829,8 @@ async function connectRoomListeners(rid) {
     showToast("Загружен твой прогресс");
   }
 
-  roomEventsRef.on("child_added", (snap) => {
+  // Слушаем только последние 30 событий (не грузим историю)
+  roomEventsRef.limitToLast(30).on("child_added", (snap) => {
     const ev = snap.val();
     if (ev && ev.senderId !== userId) applyRemoteEvent(ev);
   });
