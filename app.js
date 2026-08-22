@@ -17,6 +17,11 @@ const BASE_VIDEO_URL =
 
 const EPISODES_PER_SEASON = [6, 22, 25, 19, 28, 26, 27, 24, 25];
 
+const CURSOR_COLORS = [
+  "#ff7b72", "#79c0ff", "#7ee787", "#e3b341",
+  "#d2a8ff", "#ffa657", "#56d4dd", "#f778ba"
+];
+
 
 // ============================================================
 // DOM
@@ -25,6 +30,7 @@ const EPISODES_PER_SEASON = [6, 22, 25, 19, 28, 26, 27, 24, 25];
 const video = document.getElementById("video");
 const videoSource = document.getElementById("videoSource");
 const videoMessage = document.getElementById("videoMessage");
+const videoContainer = document.getElementById("videoContainer");
 const createRoomButton = document.getElementById("createRoomButton");
 const copyButton = document.getElementById("copyButton");
 const roomCodeElement = document.getElementById("roomCode");
@@ -52,6 +58,9 @@ const inviteModal = document.getElementById("inviteModal");
 const inviteFriendsListEl = document.getElementById("inviteFriendsList");
 const closeInviteModal = document.getElementById("closeInviteModal");
 
+const pointerToggle = document.getElementById("pointerToggle");
+const pointerOverlay = document.getElementById("pointerOverlay");
+
 
 // ============================================================
 // СОСТОЯНИЕ
@@ -74,6 +83,11 @@ let presenceOnDisconnect = null;
 
 let stateSyncTimer = null;
 let progressSaveTimer = null;
+
+// --- Указка ---
+let pointerMode = false;
+let lastPointerSend = 0;
+const remoteCursors = {}; // uid -> { element, name }
 
 
 // ============================================================
@@ -133,12 +147,8 @@ function initFirebase() {
       initInvites();
       startApp();
     } else {
-      try {
-        await auth.signInAnonymously();
-      } catch (e) {
-        console.error("Auth error:", e);
-        setConnectionStatus("Ошибка входа", "error");
-      }
+      try { await auth.signInAnonymously(); }
+      catch (e) { console.error("Auth error:", e); setConnectionStatus("Ошибка входа", "error"); }
     }
   });
 }
@@ -313,6 +323,12 @@ function setRoomInUrl(room) {
   window.history.replaceState(null, "", url);
 }
 
+function getUserColor(uid) {
+  let hash = 0;
+  for (let i = 0; i < uid.length; i++) hash = uid.charCodeAt(i) + ((hash << 5) - hash);
+  return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length];
+}
+
 
 // ============================================================
 // ЭПИЗОДЫ
@@ -396,6 +412,67 @@ video.addEventListener("error", () => {
 
 
 // ============================================================
+// УКАЗКА (POINTER)
+// ============================================================
+
+pointerToggle.addEventListener("click", () => {
+  pointerMode = !pointerMode;
+  pointerToggle.classList.toggle("active", pointerMode);
+  pointerToggle.title = pointerMode ? "Режим указки включён" : "Режим указки";
+  showToast(pointerMode ? "Режим указки включён" : "Режим указки выключен");
+});
+
+videoContainer.addEventListener("mousemove", (e) => {
+  if (!pointerMode || !roomId) return;
+  const now = Date.now();
+  if (now - lastPointerSend < 40) return;
+  lastPointerSend = now;
+  const rect = videoContainer.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width * 100);
+  const y = ((e.clientY - rect.top) / rect.height * 100);
+  sendEvent("pointer", { x, y });
+});
+
+videoContainer.addEventListener("mouseleave", () => {
+  if (!pointerMode || !roomId) return;
+  sendEvent("pointer_hide", {});
+});
+
+function createCursor(uid, name) {
+  const color = getUserColor(uid);
+  const el = document.createElement("div");
+  el.className = "pointer-cursor";
+  el.innerHTML = `
+    <svg class="cursor-icon" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+    </svg>
+    <span class="cursor-label" style="background:${color}">${escapeHtml(name || "Гость")}</span>
+  `;
+  pointerOverlay.appendChild(el);
+  remoteCursors[uid] = { element: el };
+}
+
+function updateCursor(uid, x, y) {
+  if (!remoteCursors[uid]) return;
+  const c = remoteCursors[uid];
+  c.element.style.display = "flex";
+  c.element.style.left = x + "%";
+  c.element.style.top = y + "%";
+}
+
+function hideCursor(uid) {
+  if (remoteCursors[uid]) {
+    remoteCursors[uid].element.style.display = "none";
+  }
+}
+
+function clearAllCursors() {
+  pointerOverlay.innerHTML = "";
+  for (const uid in remoteCursors) delete remoteCursors[uid];
+}
+
+
+// ============================================================
 // ПРОГРЕСС ПОЛЬЗОВАТЕЛЯ
 // ============================================================
 
@@ -419,9 +496,7 @@ async function loadPersonalProgress() {
 
 function startProgressSave() {
   clearInterval(progressSaveTimer);
-  progressSaveTimer = setInterval(() => {
-    if (roomId) savePersonalProgress();
-  }, 5000);
+  progressSaveTimer = setInterval(() => { if (roomId) savePersonalProgress(); }, 5000);
 }
 
 function stopProgressSave() {
@@ -430,10 +505,7 @@ function stopProgressSave() {
 }
 
 window.addEventListener("beforeunload", () => {
-  if (userId && roomId) {
-    // Синхронно не дождёмся Firebase, но попробуем
-    savePersonalProgress();
-  }
+  if (userId && roomId) savePersonalProgress();
 });
 
 
@@ -511,6 +583,23 @@ async function applyState(state) {
 }
 
 async function applyRemoteEvent(ev) {
+  // Указка
+  if (ev.action === "pointer") {
+    if (ev.senderId === userId) return;
+    if (!remoteCursors[ev.senderId]) {
+      const nameSnap = await db.ref(`users/${ev.senderId}/name`).once("value");
+      createCursor(ev.senderId, nameSnap.val() || "Гость");
+    }
+    updateCursor(ev.senderId, ev.x, ev.y);
+    return;
+  }
+
+  if (ev.action === "pointer_hide") {
+    if (ev.senderId === userId) return;
+    hideCursor(ev.senderId);
+    return;
+  }
+
   applyingRemoteState = true;
 
   if (ev.action === "episode" && ev.season && ev.episode) {
@@ -596,6 +685,7 @@ async function leaveRoom() {
   await savePersonalProgress();
   stopProgressSave();
   stopStateSync();
+  clearAllCursors();
 
   if (presenceOnDisconnect) {
     try { await presenceOnDisconnect.cancel(); } catch (e) {}
@@ -623,7 +713,6 @@ async function connectRoomListeners(rid) {
   roomEventsRef = db.ref(`rooms/${rid}/events`);
   roomParticipantsRef = db.ref(`rooms/${rid}/participants`);
 
-  // Смотрим, есть ли уже кто-то в комнате
   const participantsSnap = await roomParticipantsRef.once("value");
   const participantsData = participantsSnap.val() || {};
   const othersOnline = Object.entries(participantsData).some(
@@ -631,46 +720,31 @@ async function connectRoomListeners(rid) {
   );
 
   let initialState;
-
   if (othersOnline) {
-    // Комната уже активна — берём её текущее состояние (ведущий)
     const stateSnap = await roomStateRef.once("value");
     initialState = stateSnap.val();
-    if (!initialState) {
-      initialState = await loadPersonalProgress();
-    }
+    if (!initialState) initialState = await loadPersonalProgress();
     if (initialState) {
       await applyState(initialState);
       showToast("Синхронизировано с комнатой");
     }
   } else {
-    // Мы первые — загружаем свой прогресс
     initialState = await loadPersonalProgress();
-    if (!initialState) {
-      initialState = { season: 1, episode: 1, time: 0, playing: false };
-    }
+    if (!initialState) initialState = { season: 1, episode: 1, time: 0, playing: false };
     await applyState(initialState);
-    // Публикуем в комнату
-    await roomStateRef.set({
-      ...initialState,
-      updatedBy: userId,
-      updatedAt: Date.now()
-    });
+    await roomStateRef.set({ ...initialState, updatedBy: userId, updatedAt: Date.now() });
     showToast("Загружен твой прогресс");
   }
 
-  // Слушаем новые события
   roomEventsRef.on("child_added", (snap) => {
     const ev = snap.val();
     if (ev && ev.senderId !== userId) applyRemoteEvent(ev);
   });
 
-  // Участники
   roomParticipantsRef.on("value", (snap) => {
     renderParticipants(snap.val() || {});
   });
 
-  // Публикуем себя
   const meRef = roomParticipantsRef.child(userId);
   await meRef.set({ name: userName, online: true, joinedAt: Date.now() });
   presenceOnDisconnect = meRef.onDisconnect();
