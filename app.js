@@ -366,7 +366,9 @@ function populateEpisodes(season) {
 function loadEpisode(season, episode, { broadcast = true } = {}) {
   currentSeason = season;
   currentEpisode = episode;
-  videoSource.src = getVideoUrl(season, episode);
+  const url = getVideoUrl(season, episode);
+  video.src = url;
+  videoSource.src = url;
   video.load();
   updateEpisodeUI();
   seasonSelect.value = season;
@@ -916,7 +918,11 @@ copyButton.addEventListener("click", async () => {
 async function startApp() {
   populateSeasons();
   populateEpisodes(1);
-  loadEpisode(1, 1, { broadcast: false });
+  const initialUrl = getVideoUrl(1, 1);
+  video.src = initialUrl;
+  videoSource.src = initialUrl;
+  video.load();
+  updateEpisodeUI();
 
   const existing = getRoomFromUrl();
   if (existing) {
