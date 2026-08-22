@@ -1,0 +1,232 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0d0f12;
+  color: #f5f5f5;
+}
+button {
+  border: 0;
+  border-radius: 9px;
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+button:hover:not(:disabled) { opacity: .9; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.primary { background: #fff; color: #111; }
+.secondary { background: #252931; color: #fff; }
+.full { width: 100%; }
+.small { padding: 8px 12px; font-size: 12px; }
+
+.app { min-height: 100vh; }
+.header {
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 24px;
+  border-bottom: 1px solid #292d34;
+  background: #121419;
+}
+.header h1 { margin: 0 0 5px; font-size: 21px; }
+
+.status { font-size: 13px; }
+.status.connected { color: #7ee787; }
+.status.connecting { color: #e3b341; }
+.status.disconnected { color: #8b949e; }
+.status.error { color: #ff7b72; }
+
+.main {
+  width: min(1500px, 100%);
+  margin: auto;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+}
+
+.video-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 14px;
+  overflow: hidden;
+}
+video {
+  display: block;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.video-message {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 30px;
+  background: rgba(0,0,0,.55);
+  text-align: center;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.video-message.hidden { opacity: 0; }
+
+.episode-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 15px;
+  border: 1px solid #292d34;
+  border-radius: 12px;
+  background: #121419;
+}
+.episode-info { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.episode-controls { display: flex; align-items: center; gap: 10px; }
+
+.sync-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 15px;
+  border: 1px solid #292d34;
+  border-radius: 12px;
+  background: #121419;
+}
+.muted { margin-top: 5px; color: #8b949e; font-size: 13px; }
+
+.sidebar { display: flex; flex-direction: column; gap: 16px; }
+.card {
+  padding: 18px;
+  border: 1px solid #292d34;
+  border-radius: 14px;
+  background: #121419;
+}
+.card h2 { margin: 0 0 14px; font-size: 16px; }
+.room-code {
+  margin-bottom: 12px;
+  padding: 14px;
+  background: #090b0e;
+  border-radius: 9px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 24px;
+  letter-spacing: 4px;
+}
+#participants { display: flex; flex-direction: column; gap: 7px; }
+.participant {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #090b0e;
+  font-size: 14px;
+}
+.badge {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #252931;
+  color: #aeb6c2;
+  font-size: 11px;
+}
+.help { color: #aeb6c2; font-size: 13px; }
+.help ol { margin: 0; padding-left: 20px; line-height: 1.7; }
+
+.profile-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.friend-add { display: flex; gap: 8px; margin-bottom: 12px; }
+.dark-input {
+  background: #1a1d23;
+  color: #f5f5f5;
+  border: 1px solid #292d34;
+  border-radius: 9px;
+  padding: 10px 14px;
+  font-size: 14px;
+  flex: 1;
+  outline: none;
+}
+.dark-input:focus { border-color: #555; }
+.dark-select {
+  background: #1a1d23;
+  color: #f5f5f5;
+  border: 1px solid #292d34;
+  border-radius: 9px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+.dark-select:focus { border-color: #555; }
+.dark-select:disabled { opacity: .45; cursor: not-allowed; }
+
+.uid-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.uid-code { background: #090b0e; padding: 4px 8px; border-radius: 5px; font-size: 12px; word-break: break-all; color: #e3b341; }
+
+.friends-list, .invites-list, .friends-list-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.friend-row, .invite-row, .friend-row-modal {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px;
+  background: #090b0e;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.friend-row-modal { cursor: pointer; }
+.friend-row-modal:hover { background: #1a1d23; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 25px;
+  transform: translate(-50%, 20px);
+  opacity: 0;
+  padding: 11px 16px;
+  border-radius: 9px;
+  background: #fff;
+  color: #111;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 200;
+}
+.toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
+.modal {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.7);
+  align-items: center; justify-content: center;
+  z-index: 150;
+}
+.modal.active { display: flex; }
+.modal-content {
+  background: #1a1d23;
+  border: 1px solid #292d34;
+  border-radius: 14px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+}
+.modal-content h3 { margin: 0 0 14px; font-size: 18px; }
+
+@media (max-width: 900px) {
+  .main { grid-template-columns: 1fr; padding: 14px; }
+  .episode-panel { flex-wrap: wrap; }
+  .episode-controls { width: 100%; justify-content: stretch; }
+  .episode-controls .dark-select { flex: 1 1 auto; }
+  .episode-controls button { flex: 0 0 auto; }
+}
+@media (max-width: 600px) {
+  .header { align-items: flex-start; flex-direction: column; padding: 14px; }
+  .header button { width: 100%; }
+  .sync-panel { align-items: stretch; flex-direction: column; }
+  .sync-panel button { width: 100%; }
+  .episode-panel { flex-direction: column; align-items: stretch; gap: 10px; }
+  .episode-controls { width: 100%; }
+  .episode-controls button, .episode-controls select { width: 100%; }
+  .profile-row, .friend-add { flex-direction: column; }
+  .profile-row button, .friend-add button { width: 100%; }
+}
