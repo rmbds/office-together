@@ -72,6 +72,9 @@ let roomEventsRef = null;
 let roomParticipantsRef = null;
 let presenceOnDisconnect = null;
 
+let stateSyncTimer = null;
+let progressSaveTimer = null;
+
 
 // ============================================================
 // UI
@@ -163,29 +166,19 @@ async function loadProfile() {
 
 async function saveProfile() {
   const name = nicknameInput.value.trim();
-  if (!name) {
-    showToast("Введи ник");
-    return;
-  }
-  if (name.length > 30) {
-    showToast("Максимум 30 символов");
-    return;
-  }
+  if (!name) { showToast("Введи ник"); return; }
+  if (name.length > 30) { showToast("Максимум 30 символов"); return; }
   userName = name;
   localStorage.setItem("wt_name", name);
   await db.ref(`users/${userId}/name`).set(name);
   showToast("Ник сохранён");
-
   if (roomId && roomParticipantsRef) {
     await roomParticipantsRef.child(userId).update({ name });
   }
 }
 
 saveNicknameBtn.addEventListener("click", saveProfile);
-
-nicknameInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") saveProfile();
-});
+nicknameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveProfile(); });
 
 
 // ============================================================
@@ -194,12 +187,8 @@ nicknameInput.addEventListener("keydown", (e) => {
 
 copyUidBtn.addEventListener("click", async () => {
   if (!userId) return;
-  try {
-    await navigator.clipboard.writeText(userId);
-    showToast("ID скопирован");
-  } catch {
-    showToast("Не удалось скопировать");
-  }
+  try { await navigator.clipboard.writeText(userId); showToast("ID скопирован"); }
+  catch { showToast("Не удалось скопировать"); }
 });
 
 
@@ -211,19 +200,14 @@ function initFriends() {
   db.ref(`users/${userId}/friends`).on("value", async (snap) => {
     const data = snap.val() || {};
     const ids = Object.keys(data);
-    if (!ids.length) {
-      friendsListEl.innerHTML = '<div class="muted">Пока нет друзей</div>';
-      return;
-    }
-
+    if (!ids.length) { friendsListEl.innerHTML = '<div class="muted">Пока нет друзей</div>'; return; }
     friendsListEl.innerHTML = "";
     for (const fid of ids) {
       const nameSnap = await db.ref(`users/${fid}/name`).once("value");
       const fname = nameSnap.val() || "Без имени";
-
       const row = document.createElement("div");
       row.className = "friend-row";
-      row.innerHTML = `<span>${escapeHtml(fname)}</span><span class="muted" style="font-size:11px;">${fid.slice(0, 8)}…</span>`;
+      row.innerHTML = `<span>${escapeHtml(fname)}</span><span class="muted" style="font-size:11px;">${fid.slice(0,8)}…</span>`;
       friendsListEl.appendChild(row);
     }
   });
@@ -233,29 +217,17 @@ async function addFriend() {
   const fid = friendUidInput.value.trim();
   if (!fid) { showToast("Введи ID"); return; }
   if (fid === userId) { showToast("Это твой ID"); return; }
-
   const snap = await db.ref(`users/${fid}`).once("value");
-  if (!snap.exists()) {
-    showToast("Пользователь не найден");
-    return;
-  }
-
+  if (!snap.exists()) { showToast("Пользователь не найден"); return; }
   const nameSnap = await db.ref(`users/${fid}/name`).once("value");
   const fname = nameSnap.val() || "Без имени";
-
-  await db.ref(`users/${userId}/friends/${fid}`).set({
-    name: fname,
-    addedAt: Date.now()
-  });
-
+  await db.ref(`users/${userId}/friends/${fid}`).set({ name: fname, addedAt: Date.now() });
   friendUidInput.value = "";
   showToast(`${escapeHtml(fname)} добавлен в друзья`);
 }
 
 addFriendBtn.addEventListener("click", addFriend);
-friendUidInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") addFriend();
-});
+friendUidInput.addEventListener("keydown", (e) => { if (e.key === "Enter") addFriend(); });
 
 
 // ============================================================
@@ -266,27 +238,14 @@ function initInvites() {
   db.ref(`users/${userId}/invites`).on("value", (snap) => {
     const data = snap.val() || {};
     const entries = Object.entries(data);
-    if (!entries.length) {
-      invitesCard.style.display = "none";
-      return;
-    }
-
+    if (!entries.length) { invitesCard.style.display = "none"; return; }
     invitesCard.style.display = "block";
     invitesListEl.innerHTML = "";
-
-    for (const [roomId, info] of entries) {
+    for (const [rid, info] of entries) {
       const row = document.createElement("div");
       row.className = "invite-row";
-      row.innerHTML = `
-        <div>
-          <div style="font-weight:600;">Комната ${roomId}</div>
-          <div class="muted" style="font-size:12px;">от ${escapeHtml(info.fromName || "друг")}</div>
-        </div>
-        <button class="secondary small" data-room="${roomId}">Войти</button>
-      `;
-      row.querySelector("button").addEventListener("click", () => {
-        acceptInvite(roomId);
-      });
+      row.innerHTML = `<div><div style="font-weight:600;">Комната ${rid}</div><div class="muted" style="font-size:12px;">от ${escapeHtml(info.fromName || "друг")}</div></div><button class="secondary small" data-room="${rid}">Войти</button>`;
+      row.querySelector("button").addEventListener("click", () => acceptInvite(rid));
       invitesListEl.appendChild(row);
     }
   });
@@ -300,10 +259,7 @@ async function acceptInvite(rid) {
 async function sendInviteToFriend(friendId) {
   if (!roomId) return;
   await db.ref(`users/${friendId}/invites/${roomId}`).set({
-    from: userId,
-    fromName: userName,
-    roomId: roomId,
-    timestamp: Date.now()
+    from: userId, fromName: userName, roomId, timestamp: Date.now()
   });
   showToast("Приглашение отправлено");
 }
@@ -312,33 +268,21 @@ inviteFriendBtn.addEventListener("click", async () => {
   const snap = await db.ref(`users/${userId}/friends`).once("value");
   const friends = snap.val() || {};
   const ids = Object.keys(friends);
-
-  if (!ids.length) {
-    showToast("Сначала добавь друзей");
-    return;
-  }
-
+  if (!ids.length) { showToast("Сначала добавь друзей"); return; }
   inviteFriendsListEl.innerHTML = "";
   for (const fid of ids) {
     const nameSnap = await db.ref(`users/${fid}/name`).once("value");
     const fname = nameSnap.val() || "Без имени";
-
     const row = document.createElement("div");
     row.className = "friend-row-modal";
     row.innerHTML = `<span>${escapeHtml(fname)}</span><span class="muted" style="font-size:12px;">Пригласить</span>`;
-    row.addEventListener("click", () => {
-      sendInviteToFriend(fid);
-      inviteModal.classList.remove("active");
-    });
+    row.addEventListener("click", () => { sendInviteToFriend(fid); inviteModal.classList.remove("active"); });
     inviteFriendsListEl.appendChild(row);
   }
-
   inviteModal.classList.add("active");
 });
 
-closeInviteModal.addEventListener("click", () => {
-  inviteModal.classList.remove("active");
-});
+closeInviteModal.addEventListener("click", () => inviteModal.classList.remove("active"));
 
 
 // ============================================================
@@ -452,115 +396,54 @@ video.addEventListener("error", () => {
 
 
 // ============================================================
-// КОМНАТА
+// ПРОГРЕСС ПОЛЬЗОВАТЕЛЯ
 // ============================================================
 
-async function createRoom() {
-  const rid = generateRoomId();
-  roomId = rid;
-  setRoomInUrl(rid);
-  roomCodeElement.textContent = rid;
-  copyButton.disabled = false;
-  inviteFriendBtn.disabled = false;
-  setRoomStatus("Комната " + rid);
-  setConnectionStatus("Подключено", "connected");
-  updateEpisodeControls();
-
-  await connectRoomListeners(rid);
-  showToast("Комната создана");
+async function savePersonalProgress() {
+  if (!userId) return;
+  try {
+    await db.ref(`users/${userId}/progress`).set({
+      season: currentSeason,
+      episode: currentEpisode,
+      time: video.currentTime || 0,
+      updatedAt: Date.now()
+    });
+  } catch (e) { console.error("saveProgress:", e); }
 }
 
-async function joinRoom(rid) {
-  rid = rid.toUpperCase();
-  if (roomId) await leaveRoom();
-
-  roomId = rid;
-  setRoomInUrl(rid);
-  roomCodeElement.textContent = rid;
-  copyButton.disabled = false;
-  inviteFriendBtn.disabled = false;
-  setRoomStatus("Комната " + rid);
-  setConnectionStatus("Подключено", "connected");
-  updateEpisodeControls();
-
-  await connectRoomListeners(rid);
+async function loadPersonalProgress() {
+  if (!userId) return null;
+  const snap = await db.ref(`users/${userId}/progress`).once("value");
+  return snap.val();
 }
 
-async function leaveRoom() {
-  if (presenceOnDisconnect) {
-    try { await presenceOnDisconnect.cancel(); } catch (e) {}
-    presenceOnDisconnect = null;
+function startProgressSave() {
+  clearInterval(progressSaveTimer);
+  progressSaveTimer = setInterval(() => {
+    if (roomId) savePersonalProgress();
+  }, 5000);
+}
+
+function stopProgressSave() {
+  clearInterval(progressSaveTimer);
+  progressSaveTimer = null;
+}
+
+window.addEventListener("beforeunload", () => {
+  if (userId && roomId) {
+    // Синхронно не дождёмся Firebase, но попробуем
+    savePersonalProgress();
   }
-  if (roomParticipantsRef && userId) {
-    try { await roomParticipantsRef.child(userId).update({ online: false }); } catch (e) {}
-  }
-  if (roomStateRef) { roomStateRef.off(); roomStateRef = null; }
-  if (roomEventsRef) { roomEventsRef.off(); roomEventsRef = null; }
-  if (roomParticipantsRef) { roomParticipantsRef.off(); roomParticipantsRef = null; }
-
-  roomId = null;
-  roomCodeElement.textContent = "------";
-  copyButton.disabled = true;
-  inviteFriendBtn.disabled = true;
-  participantsElement.innerHTML = "—";
-  setRoomStatus("Комната не выбрана");
-  setConnectionStatus("Готово", "disconnected");
-  updateEpisodeControls();
-}
-
-async function connectRoomListeners(rid) {
-  roomStateRef = db.ref(`rooms/${rid}/state`);
-  roomEventsRef = db.ref(`rooms/${rid}/events`);
-  roomParticipantsRef = db.ref(`rooms/${rid}/participants`);
-
-  // 1. Синхронизируемся по state (один раз при заходе)
-  const stateSnap = await roomStateRef.once("value");
-  const state = stateSnap.val();
-  if (state) {
-    await applyState(state);
-  }
-
-  // 2. Слушаем новые события
-  roomEventsRef.on("child_added", (snap) => {
-    const ev = snap.val();
-    if (ev && ev.senderId !== userId) {
-      applyRemoteEvent(ev);
-    }
-  });
-
-  // 3. Участники
-  roomParticipantsRef.on("value", (snap) => {
-    const data = snap.val() || {};
-    renderParticipants(data);
-  });
-
-  // 4. Публикуем себя
-  const meRef = roomParticipantsRef.child(userId);
-  await meRef.set({
-    name: userName,
-    online: true,
-    joinedAt: Date.now()
-  });
-  presenceOnDisconnect = meRef.onDisconnect();
-  await presenceOnDisconnect.update({ online: false });
-
-  // 5. Периодически обновляем state (для новичков)
-  startStateSync();
-}
+});
 
 
 // ============================================================
 // СИНХРОНИЗАЦИЯ
 // ============================================================
 
-let stateSyncTimer = null;
-
 function startStateSync() {
   clearInterval(stateSyncTimer);
-  stateSyncTimer = setInterval(() => {
-    if (!roomId) return;
-    updateState();
-  }, 5000);
+  stateSyncTimer = setInterval(() => { if (roomId) updateState(); }, 5000);
 }
 
 function stopStateSync() {
@@ -569,9 +452,9 @@ function stopStateSync() {
 }
 
 async function updateState() {
-  if (!roomId) return;
+  if (!roomId || !roomStateRef) return;
   await roomStateRef.set({
-    time: video.currentTime,
+    time: video.currentTime || 0,
     playing: !video.paused,
     season: currentSeason,
     episode: currentEpisode,
@@ -583,12 +466,10 @@ async function updateState() {
 async function sendEvent(action, data) {
   if (!roomId || !roomEventsRef) return;
   await roomEventsRef.push({
-    action,
-    ...data,
-    senderId: userId,
-    timestamp: Date.now()
+    action, ...data, senderId: userId, timestamp: Date.now()
   });
   await updateState();
+  await savePersonalProgress();
 }
 
 async function applyState(state) {
@@ -617,12 +498,12 @@ async function applyState(state) {
     video.currentTime = t;
   }
 
-  if (state.playing) {
-    try { await video.play(); } catch (e) {
-      showToast("Тапни на видео, чтобы запустить");
+  if ("playing" in state) {
+    if (state.playing) {
+      try { await video.play(); } catch (e) { showToast("Тапни на видео, чтобы запустить"); }
+    } else {
+      video.pause();
     }
-  } else {
-    video.pause();
   }
 
   await new Promise(r => setTimeout(r, 200));
@@ -655,20 +536,14 @@ async function applyRemoteEvent(ev) {
   if (typeof ev.time === "number") {
     if (!video.duration || !Number.isFinite(video.duration)) await waitForMeta();
     let t = ev.time;
-    if (video.duration && Number.isFinite(video.duration)) {
-      t = Math.min(Math.max(0, t), video.duration);
-    }
+    if (video.duration && Number.isFinite(video.duration)) t = Math.min(Math.max(0, t), video.duration);
     video.currentTime = t;
   }
 
   if (ev.action === "play") {
-    try { await video.play(); } catch (e) {
-      showToast("Тапни на видео, чтобы запустить");
-    }
+    try { await video.play(); } catch (e) { showToast("Тапни на видео, чтобы запустить"); }
   } else if (ev.action === "pause") {
     video.pause();
-  } else if (ev.action === "seek") {
-    // время уже установлено
   }
 
   await new Promise(r => setTimeout(r, 150));
@@ -682,6 +557,127 @@ function waitForMeta() {
     video.addEventListener("loadedmetadata", h);
     setTimeout(resolve, 5000);
   });
+}
+
+
+// ============================================================
+// КОМНАТА
+// ============================================================
+
+async function createRoom() {
+  const rid = generateRoomId();
+  roomId = rid;
+  setRoomInUrl(rid);
+  roomCodeElement.textContent = rid;
+  copyButton.disabled = false;
+  inviteFriendBtn.disabled = false;
+  setRoomStatus("Комната " + rid);
+  setConnectionStatus("Подключено", "connected");
+  updateEpisodeControls();
+  await connectRoomListeners(rid);
+  showToast("Комната создана");
+}
+
+async function joinRoom(rid) {
+  rid = rid.toUpperCase();
+  if (roomId) await leaveRoom();
+  roomId = rid;
+  setRoomInUrl(rid);
+  roomCodeElement.textContent = rid;
+  copyButton.disabled = false;
+  inviteFriendBtn.disabled = false;
+  setRoomStatus("Комната " + rid);
+  setConnectionStatus("Подключено", "connected");
+  updateEpisodeControls();
+  await connectRoomListeners(rid);
+}
+
+async function leaveRoom() {
+  await savePersonalProgress();
+  stopProgressSave();
+  stopStateSync();
+
+  if (presenceOnDisconnect) {
+    try { await presenceOnDisconnect.cancel(); } catch (e) {}
+    presenceOnDisconnect = null;
+  }
+  if (roomParticipantsRef && userId) {
+    try { await roomParticipantsRef.child(userId).update({ online: false }); } catch (e) {}
+  }
+  if (roomStateRef) { roomStateRef.off(); roomStateRef = null; }
+  if (roomEventsRef) { roomEventsRef.off(); roomEventsRef = null; }
+  if (roomParticipantsRef) { roomParticipantsRef.off(); roomParticipantsRef = null; }
+
+  roomId = null;
+  roomCodeElement.textContent = "------";
+  copyButton.disabled = true;
+  inviteFriendBtn.disabled = true;
+  participantsElement.innerHTML = "—";
+  setRoomStatus("Комната не выбрана");
+  setConnectionStatus("Готово", "disconnected");
+  updateEpisodeControls();
+}
+
+async function connectRoomListeners(rid) {
+  roomStateRef = db.ref(`rooms/${rid}/state`);
+  roomEventsRef = db.ref(`rooms/${rid}/events`);
+  roomParticipantsRef = db.ref(`rooms/${rid}/participants`);
+
+  // Смотрим, есть ли уже кто-то в комнате
+  const participantsSnap = await roomParticipantsRef.once("value");
+  const participantsData = participantsSnap.val() || {};
+  const othersOnline = Object.entries(participantsData).some(
+    ([uid, info]) => uid !== userId && info && info.online
+  );
+
+  let initialState;
+
+  if (othersOnline) {
+    // Комната уже активна — берём её текущее состояние (ведущий)
+    const stateSnap = await roomStateRef.once("value");
+    initialState = stateSnap.val();
+    if (!initialState) {
+      initialState = await loadPersonalProgress();
+    }
+    if (initialState) {
+      await applyState(initialState);
+      showToast("Синхронизировано с комнатой");
+    }
+  } else {
+    // Мы первые — загружаем свой прогресс
+    initialState = await loadPersonalProgress();
+    if (!initialState) {
+      initialState = { season: 1, episode: 1, time: 0, playing: false };
+    }
+    await applyState(initialState);
+    // Публикуем в комнату
+    await roomStateRef.set({
+      ...initialState,
+      updatedBy: userId,
+      updatedAt: Date.now()
+    });
+    showToast("Загружен твой прогресс");
+  }
+
+  // Слушаем новые события
+  roomEventsRef.on("child_added", (snap) => {
+    const ev = snap.val();
+    if (ev && ev.senderId !== userId) applyRemoteEvent(ev);
+  });
+
+  // Участники
+  roomParticipantsRef.on("value", (snap) => {
+    renderParticipants(snap.val() || {});
+  });
+
+  // Публикуем себя
+  const meRef = roomParticipantsRef.child(userId);
+  await meRef.set({ name: userName, online: true, joinedAt: Date.now() });
+  presenceOnDisconnect = meRef.onDisconnect();
+  await presenceOnDisconnect.update({ online: false });
+
+  startStateSync();
+  startProgressSave();
 }
 
 
@@ -715,10 +711,7 @@ function renderParticipants(data) {
     .sort(([, a], [, b]) => (a.joinedAt || 0) - (b.joinedAt || 0));
 
   participantsElement.innerHTML = "";
-  if (!entries.length) {
-    participantsElement.textContent = "Никого нет";
-    return;
-  }
+  if (!entries.length) { participantsElement.textContent = "Никого нет"; return; }
 
   for (const [uid, info] of entries) {
     const row = document.createElement("div");
@@ -743,12 +736,8 @@ createRoomButton.addEventListener("click", createRoom);
 
 copyButton.addEventListener("click", async () => {
   if (!roomId) return;
-  try {
-    await navigator.clipboard.writeText(window.location.href);
-    showToast("Ссылка скопирована");
-  } catch {
-    showToast("Не удалось скопировать");
-  }
+  try { await navigator.clipboard.writeText(window.location.href); showToast("Ссылка скопирована"); }
+  catch { showToast("Не удалось скопировать"); }
 });
 
 
