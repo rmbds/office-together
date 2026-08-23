@@ -90,8 +90,9 @@ let progressSaveTimer = null;
 // --- Указка ---
 let pointerMode = false;
 let lastPointerSend = 0;
-const remoteCursors = {}; // uid -> { element }
+const remoteCursors = {};
 let pointersListener = null;
+let mouseInContainer = false;
 
 
 // ============================================================
@@ -132,12 +133,6 @@ function updateEpisodeControls() {
 // ============================================================
 
 function initFirebase() {
-  if (false) { // config is set
-    setConnectionStatus("Firebase не настроен", "error");
-    setRoomStatus("Вставь конфиг в app.js");
-    return;
-  }
-
   firebase.initializeApp(FIREBASE_CONFIG);
   db = firebase.database();
   auth = firebase.auth();
@@ -367,9 +362,20 @@ function loadEpisode(season, episode, { broadcast = true } = {}) {
   currentSeason = season;
   currentEpisode = episode;
   const url = getVideoUrl(season, episode);
-  video.src = url;
-  videoSource.src = url;
+
+  // Safari/Mac fix: полностью сбрасываем video перед сменой src
+  video.pause();
+  video.removeAttribute("src");
+  videoSource.removeAttribute("src");
   video.load();
+
+  // Небольшая задержка для Safari, чтобы он успел сбросить
+  requestAnimationFrame(() => {
+    video.src = url;
+    videoSource.src = url;
+    video.load();
+  });
+
   updateEpisodeUI();
   seasonSelect.value = season;
   populateEpisodes(season);
@@ -418,7 +424,42 @@ video.addEventListener("error", () => {
 
 
 // ============================================================
-// УКАЗКА (POINTER) — НОВАЯ АРХИТЕКТУРА
+// FULLSCREEN HIJACK — делаем fullscreen на контейнере
+// ============================================================
+
+function hijackFullscreen() {
+  if (!video || !videoContainer) return;
+
+  // Перехватываем нативный fullscreen video -> делаем fullscreen на контейнере
+  const orig = video.requestFullscreen?.bind(video);
+  if (orig) {
+    video.requestFullscreen = function() {
+      return videoContainer.requestFullscreen?.() || orig();
+    };
+  }
+
+  const origWebkit = video.webkitRequestFullscreen?.bind(video);
+  if (origWebkit) {
+    video.webkitRequestFullscreen = function() {
+      return videoContainer.webkitRequestFullscreen?.() || origWebkit();
+    };
+  }
+
+  const origWebkitFull = video.webkitRequestFullScreen?.bind(video);
+  if (origWebkitFull) {
+    video.webkitRequestFullScreen = function() {
+      return videoContainer.webkitRequestFullScreen?.() || origWebkitFull();
+    };
+  }
+
+  // Для iOS — там нельзя сделать fullscreen на div, оставляем как есть
+}
+
+hijackFullscreen();
+
+
+// ============================================================
+// УКАЗКА (POINTER)
 // ============================================================
 
 pointerToggle.addEventListener("click", () => {
@@ -428,7 +469,6 @@ pointerToggle.addEventListener("click", () => {
   showToast(pointerMode ? "Режим указки включён" : "Режим указки выключен");
 
   if (!pointerMode) {
-    // Выключили — удаляем свой курсор из комнаты
     if (myPointerRef) {
       myPointerRef.remove().catch(() => {});
     }
@@ -444,8 +484,7 @@ function getPointerPos(clientX, clientY) {
 }
 
 function sendPointer(x, y, visible) {
-  if (!roomId || !userId) return;
-  if (!myPointerRef) return;
+  if (!roomId || !userId || !myPointerRef) return;
   const now = Date.now();
   if (now - lastPointerSend < 50) return;
   lastPointerSend = now;
@@ -458,15 +497,29 @@ function sendPointer(x, y, visible) {
 }
 
 // Mouse
+videoContainer.addEventListener("mouseenter", () => { mouseInContainer = true; });
+
 videoContainer.addEventListener("mousemove", (e) => {
   if (!pointerMode) return;
+  mouseInContainer = true;
   const pos = getPointerPos(e.clientX, e.clientY);
   sendPointer(pos.x, pos.y, true);
 });
 
 videoContainer.addEventListener("mouseleave", () => {
-  if (!pointerMode) return;
-  sendPointer(0, 0, false);
+  mouseInContainer = false;
+  if (pointerMode) sendPointer(0, 0, false);
+});
+
+// Global fallback — если мышь ушла за пределы окна
+window.addEventListener("blur", () => {
+  if (pointerMode) sendPointer(0, 0, false);
+});
+
+document.addEventListener("mouseout", (e) => {
+  if (pointerMode && e.relatedTarget === null) {
+    sendPointer(0, 0, false);
+  }
 });
 
 // Touch
@@ -546,7 +599,6 @@ function attachPointersListener(rid) {
     const data = snap.val() || {};
     const now = Date.now();
 
-    // Удаляем устаревшие (> 5 сек без обновления) и невидимые
     for (const uid in remoteCursors) {
       const p = data[uid];
       if (!p || !p.visible || (now - p.timestamp > 5000) || uid === userId) {
@@ -554,7 +606,6 @@ function attachPointersListener(rid) {
       }
     }
 
-    // Создаём / обновляем активные
     for (const uid in data) {
       if (uid === userId) continue;
       const p = data[uid];
@@ -648,8 +699,16 @@ async function applyState(state) {
     if (state.season !== currentSeason || state.episode !== currentEpisode) {
       currentSeason = state.season;
       currentEpisode = state.episode;
-      videoSource.src = getVideoUrl(state.season, state.episode);
+      const url = getVideoUrl(state.season, state.episode);
+      video.pause();
+      video.removeAttribute("src");
+      videoSource.removeAttribute("src");
       video.load();
+      requestAnimationFrame(() => {
+        video.src = url;
+        videoSource.src = url;
+        video.load();
+      });
       updateEpisodeUI();
       seasonSelect.value = state.season;
       populateEpisodes(state.season);
@@ -686,8 +745,16 @@ async function applyRemoteEvent(ev) {
     if (ev.season !== currentSeason || ev.episode !== currentEpisode) {
       currentSeason = ev.season;
       currentEpisode = ev.episode;
-      videoSource.src = getVideoUrl(ev.season, ev.episode);
+      const url = getVideoUrl(ev.season, ev.episode);
+      video.pause();
+      video.removeAttribute("src");
+      videoSource.removeAttribute("src");
       video.load();
+      requestAnimationFrame(() => {
+        video.src = url;
+        videoSource.src = url;
+        video.load();
+      });
       updateEpisodeUI();
       seasonSelect.value = ev.season;
       populateEpisodes(ev.season);
@@ -767,7 +834,6 @@ async function leaveRoom() {
   stopStateSync();
   clearAllCursors();
 
-  // Удаляем свой курсор
   if (myPointerRef) {
     try { await myPointerRef.remove(); } catch (e) {}
     myPointerRef = null;
@@ -803,7 +869,6 @@ async function connectRoomListeners(rid) {
   roomEventsRef = db.ref(`rooms/${rid}/events`);
   roomParticipantsRef = db.ref(`rooms/${rid}/participants`);
 
-  // Указка — отдельная ветка
   myPointerRef = db.ref(`rooms/${rid}/pointers/${userId}`);
   myPointerRef.onDisconnect().remove().catch(() => {});
   attachPointersListener(rid);
@@ -831,7 +896,6 @@ async function connectRoomListeners(rid) {
     showToast("Загружен твой прогресс");
   }
 
-  // Слушаем только последние 30 событий (не грузим историю)
   roomEventsRef.limitToLast(30).on("child_added", (snap) => {
     const ev = snap.val();
     if (ev && ev.senderId !== userId) applyRemoteEvent(ev);
@@ -852,7 +916,7 @@ async function connectRoomListeners(rid) {
 
 
 // ============================================================
-// ВИДЕО → FIREBASE (любой участник)
+// ВИДЕО → FIREBASE
 // ============================================================
 
 video.addEventListener("play", async () => {
@@ -918,6 +982,7 @@ copyButton.addEventListener("click", async () => {
 async function startApp() {
   populateSeasons();
   populateEpisodes(1);
+
   const initialUrl = getVideoUrl(1, 1);
   video.src = initialUrl;
   videoSource.src = initialUrl;
