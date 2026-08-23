@@ -82,6 +82,31 @@ video::-webkit-media-controls-time-remaining-display {
   font-family: system-ui, sans-serif !important;
 }
 
+/* FULLSCREEN — контейнер растягивается, всё внутри видно */
+.video-container:fullscreen,
+.video-container:-webkit-full-screen,
+.video-container:-moz-full-screen,
+.video-container:-ms-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  padding-bottom: 0 !important;
+  z-index: 2147483647;
+  background: #000;
+}
+.video-container:fullscreen video,
+.video-container:-webkit-full-screen video,
+.video-container:-moz-full-screen video,
+.video-container:-ms-fullscreen video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .video-message {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -156,6 +181,13 @@ video::-webkit-media-controls-time-remaining-display {
   color: #111;
   border-color: rgba(255,255,255,.9);
   box-shadow: 0 0 12px rgba(255,255,255,.25);
+}
+
+/* В fullscreen кнопка остаётся видна */
+.video-container:fullscreen .pointer-toggle,
+.video-container:-webkit-full-screen .pointer-toggle {
+  top: 14px;
+  left: 14px;
 }
 
 .episode-panel {
