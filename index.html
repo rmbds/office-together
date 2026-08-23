@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Office with Love</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <h1>Office Together</h1>
+        <div id="connectionStatus" class="status disconnected">Не подключено</div>
+      </div>
+      <button id="createRoomButton" class="primary">Создать комнату</button>
+    </header>
+
+    <main class="main">
+      <section class="watch-section">
+        <div class="video-wrapper" id="videoWrapper">
+          <div class="video-container" id="videoContainer">
+            <video id="video" controls playsinline webkit-playsinline preload="metadata">
+              <source id="videoSource" src="" type="video/mp4">
+              Ваш браузер не поддерживает HTML5 video.
+            </video>
+
+            <div id="pointerOverlay" class="pointer-overlay"></div>
+
+            <button id="pointerToggle" class="pointer-toggle" title="Режим указки (показывать курсор собеседнику)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="16"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+            </button>
+
+            <div id="videoMessage" class="video-message">Загрузка видео...</div>
+          </div>
+        </div>
+
+        <div class="episode-panel">
+          <div class="episode-info" id="episodeLabel">Сезон 1, Серия 1</div>
+          <div class="episode-controls">
+            <button id="prevEpisodeBtn" class="secondary" disabled>←</button>
+            <select id="seasonSelect" class="dark-select" disabled></select>
+            <select id="episodeSelect" class="dark-select" disabled></select>
+            <button id="nextEpisodeBtn" class="secondary" disabled>→</button>
+          </div>
+        </div>
+
+        <div class="sync-panel">
+          <div>
+            <strong id="roomStatus">Комната не выбрана</strong>
+            <div id="leaderStatus" class="muted">—</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="card">
+          <h2>Мой профиль</h2>
+          <div class="profile-row">
+            <input id="nicknameInput" class="dark-input" placeholder="Введи ник" maxlength="30">
+            <button id="saveNicknameBtn" class="secondary">Сохранить</button>
+          </div>
+          <div class="uid-row">
+            <span class="muted">Твой ID:</span>
+            <code id="myUid" class="uid-code">—</code>
+            <button id="copyUidBtn" class="secondary small">Копировать</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Друзья</h2>
+          <div class="friend-add">
+            <input id="friendUidInput" class="dark-input" placeholder="ID друга">
+            <button id="addFriendBtn" class="secondary">Добавить</button>
+          </div>
+          <div id="friendsList" class="friends-list">
+            <div class="muted">Пока нет друзей</div>
+          </div>
+        </section>
+
+        <section class="card" id="invitesCard" style="display:none;">
+          <h2>📩 Приглашения</h2>
+          <div id="invitesList" class="invites-list"></div>
+        </section>
+
+        <section class="card">
+          <h2>Комната</h2>
+          <div id="roomCode" class="room-code">------</div>
+          <button id="copyButton" class="secondary full" disabled>Скопировать ссылку</button>
+          <button id="inviteFriendBtn" class="secondary full" disabled style="margin-top:8px;">Пригласить друга</button>
+        </section>
+
+        <section class="card">
+          <h2>Участники</h2>
+          <div id="participants">—</div>
+        </section>
+
+        <section class="card help">
+          <h2>Как пользоваться</h2>
+          <ol>
+            <li>Введи ник и сохрани.</li>
+            <li>Создай комнату.</li>
+            <li>Скопируй ссылку или пригласи друга.</li>
+            <li>Любой может ставить на паузу, запускать и менять серию.</li>
+            <li>Нажми 🔴 над плеером, чтобы показать момент пальцем/мышью.</li>
+          </ol>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div id="inviteModal" class="modal">
+    <div class="modal-content">
+      <h3>Пригласить друга</h3>
+      <div id="inviteFriendsList" class="friends-list-modal"></div>
+      <button id="closeInviteModal" class="secondary full" style="margin-top:12px;">Закрыть</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
