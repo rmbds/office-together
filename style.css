@@ -105,6 +105,29 @@ video::-webkit-media-controls-time-remaining-display {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  z-index: 1;
+}
+
+/* В fullscreen overlay и кнопка ПОВЕРХ видео */
+.video-container:fullscreen .pointer-overlay,
+.video-container:-webkit-full-screen .pointer-overlay,
+.video-container:-moz-full-screen .pointer-overlay,
+.video-container:-ms-fullscreen .pointer-overlay {
+  z-index: 10;
+}
+.video-container:fullscreen .pointer-toggle,
+.video-container:-webkit-full-screen .pointer-toggle,
+.video-container:-moz-full-screen .pointer-toggle,
+.video-container:-ms-fullscreen .pointer-toggle {
+  z-index: 20;
+  top: 14px;
+  left: 14px;
+}
+.video-container:fullscreen .video-message,
+.video-container:-webkit-full-screen .video-message,
+.video-container:-moz-full-screen .video-message,
+.video-container:-ms-fullscreen .video-message {
+  z-index: 5;
 }
 
 .video-message {
@@ -123,7 +146,7 @@ video::-webkit-media-controls-time-remaining-display {
 .pointer-overlay {
   position: absolute; inset: 0;
   pointer-events: none;
-  z-index: 5;
+  z-index: 8;
   overflow: hidden;
 }
 .pointer-cursor {
@@ -157,7 +180,7 @@ video::-webkit-media-controls-time-remaining-display {
   position: absolute;
   top: 10px;
   left: 10px;
-  z-index: 20;
+  z-index: 15;
   background: rgba(30,30,35,.85);
   border: 1px solid rgba(255,255,255,.15);
   color: #fff;
