@@ -103,38 +103,6 @@
           <div id="participants">—</div>
         </section>
 
-        <section class="card chat-card" id="chatCard">
-          <h2>💬 Чат комнаты</h2>
-          <div id="chatMessages" class="chat-messages">
-            <div class="chat-welcome">Напиши что-нибудь...</div>
-          </div>
-          <div class="chat-input-row">
-            <button id="chatEmojiBtn" class="chat-emoji-btn" title="Эмодзи">&#128522;</button>
-            <input id="chatInput" class="dark-input chat-input" placeholder="Сообщение... (Ctrl+V для фото)" maxlength="500">
-            <button id="chatSendBtn" class="chat-send-btn">&#10148;</button>
-          </div>
-          <div id="emojiPicker" class="emoji-picker" style="display:none;">
-            <div class="emoji-grid">
-              <span class="emoji-item">&#128512;</span><span class="emoji-item">&#128514;</span><span class="emoji-item">&#129392;</span>
-              <span class="emoji-item">&#128525;</span><span class="emoji-item">&#129300;</span><span class="emoji-item">&#128526;</span>
-              <span class="emoji-item">&#129395;</span><span class="emoji-item">&#128561;</span><span class="emoji-item">&#129327;</span>
-              <span class="emoji-item">&#128557;</span><span class="emoji-item">&#128545;</span><span class="emoji-item">&#129313;</span>
-              <span class="emoji-item">&#128123;</span><span class="emoji-item">&#128128;</span><span class="emoji-item">&#127875;</span>
-              <span class="emoji-item">&#129314;</span><span class="emoji-item">&#129397;</span><span class="emoji-item">&#129398;</span>
-              <span class="emoji-item">&#10084;&#65039;</span><span class="emoji-item">&#128148;</span><span class="emoji-item">&#128150;</span>
-              <span class="emoji-item">&#128293;</span><span class="emoji-item">&#128175;</span><span class="emoji-item">&#10024;</span>
-              <span class="emoji-item">&#127881;</span><span class="emoji-item">&#127882;</span><span class="emoji-item">&#127873;</span>
-              <span class="emoji-item">&#128077;</span><span class="emoji-item">&#128078;</span><span class="emoji-item">&#128079;</span>
-              <span class="emoji-item">&#128591;</span><span class="emoji-item">&#129309;</span><span class="emoji-item">&#128170;</span>
-              <span class="emoji-item">&#128536;</span><span class="emoji-item">&#128530;</span><span class="emoji-item">&#128527;</span>
-              <span class="emoji-item">&#128563;</span><span class="emoji-item">&#128520;</span><span class="emoji-item">&#129322;</span>
-              <span class="emoji-item">&#128169;</span><span class="emoji-item">&#128640;</span><span class="emoji-item">&#127828;</span>
-              <span class="emoji-item">&#127866;</span><span class="emoji-item">&#127867;</span><span class="emoji-item">&#9749;</span>
-              <span class="emoji-item">&#127881;</span><span class="emoji-item">&#127925;</span><span class="emoji-item">&#127908;</span>
-            </div>
-          </div>
-        </section>
-
         <section class="card help">
           <h2>Как пользоваться</h2>
           <ol>
@@ -143,7 +111,6 @@
             <li>Скопируй ссылку или пригласи друга.</li>
             <li>Любой может ставить на паузу, запускать и менять серию.</li>
             <li>Нажми 🔴 над плеером, чтобы показать момент пальцем/мышью.</li>
-            <li>Чат: пиши сообщения, жми Ctrl+V чтобы вставить фото.</li>
           </ol>
         </section>
       </aside>
@@ -156,10 +123,6 @@
       <div id="inviteFriendsList" class="friends-list-modal"></div>
       <button id="closeInviteModal" class="secondary full" style="margin-top:12px;">Закрыть</button>
     </div>
-  </div>
-
-  <div id="lightboxOverlay" class="lightbox-overlay">
-    <img id="lightboxImage" src="" alt="">
   </div>
 
   <div id="toast" class="toast"></div>
