@@ -63,14 +63,6 @@ const pointerToggle = document.getElementById("pointerToggle");
 const pointerOverlay = document.getElementById("pointerOverlay");
 
 
-const chatMessages = document.getElementById("chatMessages");
-const chatInput = document.getElementById("chatInput");
-const chatSendBtn = document.getElementById("chatSendBtn");
-const chatEmojiBtn = document.getElementById("chatEmojiBtn");
-const emojiPicker = document.getElementById("emojiPicker");
-const lightboxOverlay = document.getElementById("lightboxOverlay");
-const lightboxImage = document.getElementById("lightboxImage");
-
 // ============================================================
 // СОСТОЯНИЕ
 // ============================================================
@@ -103,11 +95,6 @@ const remoteCursors = {};
 let pointersListener = null;
 let mouseInContainer = false;
 
-
-// --- Чат ---
-let roomChatRef = null;
-let chatListener = null;
-let pendingImageData = null;
 
 // ============================================================
 // UI
@@ -896,7 +883,6 @@ async function leaveRoom() {
   setRoomStatus("Комната не выбрана");
   setConnectionStatus("Готово", "disconnected");
   updateEpisodeControls();
-  detachChatListener();
 }
 
 async function connectRoomListeners(rid) {
@@ -949,7 +935,6 @@ async function connectRoomListeners(rid) {
   startStateSync();
   startProgressSave();
   startEpisodeCheck();
-  attachChatListener(rid);
 }
 
 
@@ -1020,7 +1005,6 @@ copyButton.addEventListener("click", async () => {
 async function startApp() {
   populateSeasons();
   populateEpisodes(1);
-  initChat();
 
   const initialUrl = getVideoUrl(1, 1);
   video.src = initialUrl;
@@ -1038,216 +1022,3 @@ async function startApp() {
 }
 
 initFirebase();
-
-
-
-// ============================================================
-// ЧАТ КОМНАТЫ
-// ============================================================
-
-const chatMessages = document.getElementById("chatMessages");
-const chatInput = document.getElementById("chatInput");
-const chatSendBtn = document.getElementById("chatSendBtn");
-const chatEmojiBtn = document.getElementById("chatEmojiBtn");
-const emojiPicker = document.getElementById("emojiPicker");
-const lightboxOverlay = document.getElementById("lightboxOverlay");
-const lightboxImage = document.getElementById("lightboxImage");
-
-let roomChatRef = null;
-let chatListener = null;
-let pendingImageData = null; // base64 строка вставленного изображения
-
-function initChat() {
-  // Отправка по Enter
-  chatInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  });
-
-  // Кнопка отправки
-  chatSendBtn.addEventListener("click", sendChatMessage);
-
-  // Эмодзи пикер
-  chatEmojiBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const showing = emojiPicker.style.display === "block";
-    emojiPicker.style.display = showing ? "none" : "block";
-  });
-
-  // Клик по эмодзи
-  emojiPicker.querySelectorAll(".emoji-item").forEach((el) => {
-    el.addEventListener("click", () => {
-      chatInput.value += el.textContent;
-      chatInput.focus();
-    });
-  });
-
-  // Закрыть пикер при клике вне
-  document.addEventListener("click", (e) => {
-    if (!emojiPicker.contains(e.target) && e.target !== chatEmojiBtn) {
-      emojiPicker.style.display = "none";
-    }
-  });
-
-  // Ctrl+V вставка фото
-  chatInput.addEventListener("paste", handleChatPaste);
-
-  // Лайтбокс
-  lightboxOverlay.addEventListener("click", () => {
-    lightboxOverlay.classList.remove("active");
-    lightboxImage.src = "";
-  });
-}
-
-function handleChatPaste(e) {
-  const items = e.clipboardData?.items;
-  if (!items) return;
-
-  for (const item of items) {
-    if (item.type.startsWith("image/")) {
-      e.preventDefault();
-      const file = item.getAsFile();
-      if (!file) continue;
-
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const base64 = ev.target.result;
-        // Показываем превью в инпуте
-        showPastePreview(base64);
-      };
-      reader.readAsDataURL(file);
-      break;
-    }
-  }
-}
-
-function showPastePreview(base64) {
-  pendingImageData = base64;
-
-  // Удаляем старое превью
-  const old = chatInput.parentElement.querySelector(".chat-paste-preview");
-  if (old) old.remove();
-
-  const preview = document.createElement("div");
-  preview.className = "chat-paste-preview";
-  preview.innerHTML = `
-    <img src="${base64}" alt="preview">
-    <button class="remove-paste" title="Убрать">&#10005;</button>
-  `;
-
-  preview.querySelector(".remove-paste").addEventListener("click", () => {
-    preview.remove();
-    pendingImageData = null;
-  });
-
-  chatInput.parentElement.insertBefore(preview, chatInput);
-}
-
-async function sendChatMessage() {
-  const text = chatInput.value.trim();
-  if (!roomId || !roomChatRef) {
-    if (text || pendingImageData) showToast("Сначала войди в комнату");
-    return;
-  }
-  if (!text && !pendingImageData) return;
-
-  const msg = {
-    text: text || "",
-    image: pendingImageData || null,
-    senderId: userId,
-    senderName: userName,
-    timestamp: Date.now()
-  };
-
-  await roomChatRef.push(msg);
-
-  // Очистка
-  chatInput.value = "";
-  pendingImageData = null;
-  const preview = chatInput.parentElement.querySelector(".chat-paste-preview");
-  if (preview) preview.remove();
-  emojiPicker.style.display = "none";
-}
-
-function attachChatListener(rid) {
-  if (chatListener && roomChatRef) {
-    roomChatRef.off("child_added", chatListener);
-  }
-
-  roomChatRef = db.ref(`rooms/${rid}/chat`);
-
-  // Загружаем последние 50 сообщений
-  roomChatRef.limitToLast(50).once("value", (snap) => {
-    const data = snap.val() || {};
-    chatMessages.innerHTML = "";
-    const entries = Object.entries(data).sort((a, b) => a[1].timestamp - b[1].timestamp);
-    for (const [, msg] of entries) {
-      renderChatMessage(msg);
-    }
-    scrollChatToBottom();
-  });
-
-  // Слушаем новые
-  chatListener = roomChatRef.limitToLast(1).on("child_added", (snap) => {
-    const msg = snap.val();
-    if (!msg) return;
-    // Проверяем, не рендерили ли уже
-    const existing = chatMessages.querySelector(`[data-ts="${msg.timestamp}"]`);
-    if (existing) return;
-    renderChatMessage(msg);
-    scrollChatToBottom();
-  });
-}
-
-function renderChatMessage(msg) {
-  const isOwn = msg.senderId === userId;
-  const el = document.createElement("div");
-  el.className = "chat-message" + (isOwn ? " own" : "");
-  el.dataset.ts = msg.timestamp;
-
-  const time = new Date(msg.timestamp).toLocaleTimeString("ru-RU", {
-    hour: "2-digit", minute: "2-digit"
-  });
-
-  let html = `
-    <div class="chat-message-header">
-      <span class="chat-message-name" style="color:${getUserColor(msg.senderId)}">${escapeHtml(msg.senderName || "Гость")}</span>
-      <span class="chat-message-time">${time}</span>
-    </div>
-  `;
-
-  if (msg.text) {
-    html += `<div class="chat-message-text">${escapeHtml(msg.text)}</div>`;
-  }
-
-  if (msg.image) {
-    html += `<img class="chat-message-image" src="${msg.image}" alt="фото" loading="lazy">`;
-  }
-
-  el.innerHTML = html;
-  chatMessages.appendChild(el);
-
-  // Клик по фото → лайтбокс
-  const img = el.querySelector(".chat-message-image");
-  if (img) {
-    img.addEventListener("click", () => {
-      lightboxImage.src = img.src;
-      lightboxOverlay.classList.add("active");
-    });
-  }
-}
-
-function scrollChatToBottom() {
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function detachChatListener() {
-  if (chatListener && roomChatRef) {
-    roomChatRef.off("child_added", chatListener);
-    chatListener = null;
-  }
-  roomChatRef = null;
-  chatMessages.innerHTML = '<div class="chat-welcome">Напиши что-нибудь...</div>';
-}
