@@ -86,6 +86,7 @@ let presenceOnDisconnect = null;
 
 let stateSyncTimer = null;
 let progressSaveTimer = null;
+let episodeCheckTimer = null;
 
 // --- Указка ---
 let pointerMode = false;
@@ -369,7 +370,6 @@ function loadEpisode(season, episode, { broadcast = true } = {}) {
   videoSource.removeAttribute("src");
   video.load();
 
-  // Небольшая задержка для Safari, чтобы он успел сбросить
   requestAnimationFrame(() => {
     video.src = url;
     videoSource.src = url;
@@ -424,13 +424,12 @@ video.addEventListener("error", () => {
 
 
 // ============================================================
-// FULLSCREEN HIJACK — делаем fullscreen на контейнере
+// FULLSCREEN HIJACK — fullscreen на контейнере
 // ============================================================
 
 function hijackFullscreen() {
   if (!video || !videoContainer) return;
 
-  // Перехватываем нативный fullscreen video -> делаем fullscreen на контейнере
   const orig = video.requestFullscreen?.bind(video);
   if (orig) {
     video.requestFullscreen = function() {
@@ -451,8 +450,6 @@ function hijackFullscreen() {
       return videoContainer.webkitRequestFullScreen?.() || origWebkitFull();
     };
   }
-
-  // Для iOS — там нельзя сделать fullscreen на div, оставляем как есть
 }
 
 hijackFullscreen();
@@ -511,7 +508,6 @@ videoContainer.addEventListener("mouseleave", () => {
   if (pointerMode) sendPointer(0, 0, false);
 });
 
-// Global fallback — если мышь ушла за пределы окна
 window.addEventListener("blur", () => {
   if (pointerMode) sendPointer(0, 0, false);
 });
@@ -669,6 +665,30 @@ function startStateSync() {
 function stopStateSync() {
   clearInterval(stateSyncTimer);
   stateSyncTimer = null;
+}
+
+function startEpisodeCheck() {
+  clearInterval(episodeCheckTimer);
+  episodeCheckTimer = setInterval(async () => {
+    if (!roomId || !roomStateRef) return;
+    const snap = await roomStateRef.once("value");
+    const state = snap.val();
+    if (!state) return;
+
+    // Если серия в комнате не совпадает с нашей — принудительно синхронизируем
+    if (state.season && state.episode) {
+      if (state.season !== currentSeason || state.episode !== currentEpisode) {
+        console.log("[EpisodeCheck] mismatch detected, syncing to", state.season, state.episode);
+        await applyState(state);
+        showToast(`Синхронизировано: Сезон ${state.season}, Серия ${state.episode}`);
+      }
+    }
+  }, 8000);
+}
+
+function stopEpisodeCheck() {
+  clearInterval(episodeCheckTimer);
+  episodeCheckTimer = null;
 }
 
 async function updateState() {
@@ -832,6 +852,7 @@ async function leaveRoom() {
   await savePersonalProgress();
   stopProgressSave();
   stopStateSync();
+  stopEpisodeCheck();
   clearAllCursors();
 
   if (myPointerRef) {
@@ -885,6 +906,7 @@ async function connectRoomListeners(rid) {
     initialState = stateSnap.val();
     if (!initialState) initialState = await loadPersonalProgress();
     if (initialState) {
+      // Принудительно синхронизируем серию при входе
       await applyState(initialState);
       showToast("Синхронизировано с комнатой");
     }
@@ -912,6 +934,7 @@ async function connectRoomListeners(rid) {
 
   startStateSync();
   startProgressSave();
+  startEpisodeCheck();
 }
 
 
