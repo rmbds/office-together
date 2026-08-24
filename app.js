@@ -1030,16 +1030,16 @@ initFirebase();
 
 
 // ============================================================
-// АДМИН-ПАНЕЛЬ + ЧАТ
+// АДМИН-ПАНЕЛЬ + ЧАТ v2
 // ============================================================
 
 const ADMIN_UID = "ZlGv3LWW1RhEhsw4ZoHps565s6z2";
-let isAdmin = false;
-let adminRoomCommandsRef = null;
-let adminCommandsListener = null;
-let trollModeInterval = null;
 
-// --- Чат DOM ---
+// --- Drawer refs ---
+const adminDrawer = document.getElementById("adminDrawer");
+const adminToggleBtn = document.getElementById("adminToggleBtn");
+
+// --- Chat refs ---
 const chatMessages = document.getElementById("chatMessages");
 const chatInput = document.getElementById("chatInput");
 const chatSendBtn = document.getElementById("chatSendBtn");
@@ -1048,8 +1048,7 @@ const emojiPicker = document.getElementById("emojiPicker");
 const lightboxOverlay = document.getElementById("lightboxOverlay");
 const lightboxImage = document.getElementById("lightboxImage");
 
-// --- Админ DOM ---
-const adminPanel = document.getElementById("adminPanel");
+// --- Admin refs ---
 const adminParticipantsList = document.getElementById("adminParticipantsList");
 const adminMessageInput = document.getElementById("adminMessageInput");
 const adminSendMessage = document.getElementById("adminSendMessage");
@@ -1057,7 +1056,11 @@ const adminOverlayMessage = document.getElementById("adminOverlayMessage");
 const confettiCanvas = document.getElementById("confettiCanvas");
 const jumpScareOverlay = document.getElementById("jumpScareOverlay");
 
-// --- Чат state ---
+// --- State ---
+let isAdmin = false;
+let adminRoomCommandsRef = null;
+let adminCommandsListener = null;
+let trollModeInterval = null;
 let roomChatRef = null;
 let chatListener = null;
 let pendingImageData = null;
@@ -1067,15 +1070,44 @@ let pendingImageData = null;
 // ============================================================
 
 function initAdminAndChat() {
+  console.log("[initAdminAndChat] starting...");
   initChat();
+  initAdminDrawer();
   checkAdmin();
+  console.log("[initAdminAndChat] done. isAdmin:", isAdmin);
+}
+
+function initAdminDrawer() {
+  if (!adminToggleBtn || !adminDrawer) {
+    console.warn("[initAdminDrawer] elements not found");
+    return;
+  }
+
+  adminToggleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = adminDrawer.classList.toggle("open");
+    adminToggleBtn.classList.toggle("active", isOpen);
+    console.log("[adminToggle] drawer open:", isOpen);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (adminDrawer.classList.contains("open") && !adminDrawer.contains(e.target) && e.target !== adminToggleBtn) {
+      adminDrawer.classList.remove("open");
+      adminToggleBtn.classList.remove("active");
+    }
+  });
 }
 
 function checkAdmin() {
+  console.log("[checkAdmin] userId:", userId, "ADMIN_UID:", ADMIN_UID);
   isAdmin = (userId === ADMIN_UID);
-  if (isAdmin && adminPanel) {
-    adminPanel.style.display = "block";
+  if (isAdmin) {
+    console.log("[checkAdmin] ADMIN DETECTED!");
+    if (adminToggleBtn) adminToggleBtn.style.display = "block";
     initAdminButtons();
+  } else {
+    console.log("[checkAdmin] not admin");
+    if (adminToggleBtn) adminToggleBtn.style.display = "none";
   }
   listenAdminCommands();
 }
@@ -1085,7 +1117,7 @@ function checkAdmin() {
 // ============================================================
 
 function initChat() {
-  if (!chatInput) return;
+  if (!chatInput) { console.warn("[initChat] chatInput not found"); return; }
 
   chatInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1132,9 +1164,7 @@ function handleChatPaste(e) {
       const file = item.getAsFile();
       if (!file) continue;
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        showPastePreview(ev.target.result);
-      };
+      reader.onload = (ev) => showPastePreview(ev.target.result);
       reader.readAsDataURL(file);
       break;
     }
@@ -1147,7 +1177,7 @@ function showPastePreview(base64) {
   if (old) old.remove();
   const preview = document.createElement("div");
   preview.className = "chat-paste-preview";
-  preview.innerHTML = `<img src="${base64}" alt="preview"><button class="remove-paste" title="Убрать">&#10005;</button>`;
+  preview.innerHTML = '<img src="' + base64 + '" alt="preview"><button class="remove-paste" title="Убрать">&#10005;</button>';
   preview.querySelector(".remove-paste").addEventListener("click", () => {
     preview.remove();
     pendingImageData = null;
@@ -1162,6 +1192,7 @@ async function sendChatMessage() {
     return;
   }
   if (!text && !pendingImageData) return;
+
   const msg = {
     text: text || "",
     image: pendingImageData || null,
@@ -1169,30 +1200,39 @@ async function sendChatMessage() {
     senderName: userName,
     timestamp: Date.now()
   };
-  await roomChatRef.push(msg);
-  chatInput.value = "";
-  pendingImageData = null;
-  const preview = chatInput.parentElement.querySelector(".chat-paste-preview");
-  if (preview) preview.remove();
-  emojiPicker.style.display = "none";
+
+  try {
+    await roomChatRef.push(msg);
+    chatInput.value = "";
+    pendingImageData = null;
+    const preview = chatInput.parentElement.querySelector(".chat-paste-preview");
+    if (preview) preview.remove();
+    emojiPicker.style.display = "none";
+  } catch (e) {
+    console.error("[sendChatMessage] error:", e);
+    showToast("Ошибка отправки");
+  }
 }
 
 function attachChatListener(rid) {
   if (chatListener && roomChatRef) {
     roomChatRef.off("child_added", chatListener);
   }
-  roomChatRef = db.ref(`rooms/${rid}/chat`);
+
+  roomChatRef = db.ref("rooms/" + rid + "/chat");
+
   roomChatRef.limitToLast(50).once("value", (snap) => {
     const data = snap.val() || {};
     chatMessages.innerHTML = "";
-    const entries = Object.entries(data).sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const entries = Object.entries(data).sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
     for (const [, msg] of entries) renderChatMessage(msg);
     scrollChatToBottom();
   });
+
   chatListener = roomChatRef.limitToLast(1).on("child_added", (snap) => {
     const msg = snap.val();
     if (!msg) return;
-    const existing = chatMessages.querySelector(`[data-ts="${msg.timestamp}"]`);
+    const existing = chatMessages.querySelector('[data-ts="' + msg.timestamp + '"]');
     if (existing) return;
     renderChatMessage(msg);
     scrollChatToBottom();
@@ -1204,12 +1244,15 @@ function renderChatMessage(msg) {
   const el = document.createElement("div");
   el.className = "chat-message" + (isOwn ? " own" : "");
   el.dataset.ts = msg.timestamp;
+
   const time = new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  let html = `<div class="chat-message-header"><span class="chat-message-name" style="color:${getUserColor(msg.senderId)}">${escapeHtml(msg.senderName || "Гость")}</span><span class="chat-message-time">${time}</span></div>`;
-  if (msg.text) html += `<div class="chat-message-text">${escapeHtml(msg.text)}</div>`;
-  if (msg.image) html += `<img class="chat-message-image" src="${msg.image}" alt="фото" loading="lazy">`;
+  let html = '<div class="chat-message-header"><span class="chat-message-name" style="color:' + getUserColor(msg.senderId) + '">' + escapeHtml(msg.senderName || "Гость") + '</span><span class="chat-message-time">' + time + '</span></div>';
+  if (msg.text) html += '<div class="chat-message-text">' + escapeHtml(msg.text) + '</div>';
+  if (msg.image) html += '<img class="chat-message-image" src="' + msg.image + '" alt="фото" loading="lazy">';
+
   el.innerHTML = html;
   chatMessages.appendChild(el);
+
   const img = el.querySelector(".chat-message-image");
   if (img) {
     img.addEventListener("click", () => {
@@ -1236,55 +1279,98 @@ function detachChatListener() {
 // АДМИН-ПАНЕЛЬ
 // ============================================================
 
-async function sendAdminCommand(targetUid, command, data = {}) {
+async function sendAdminCommand(targetUid, command, data) {
   if (!roomId || !isAdmin) return;
-  await db.ref(`rooms/${roomId}/adminCommands/${targetUid}`).set({
-    command, data, from: userId, timestamp: Date.now()
-  });
-}
-
-async function clearAdminCommand(targetUid) {
-  if (!roomId) return;
-  await db.ref(`rooms/${roomId}/adminCommands/${targetUid}`).remove();
+  data = data || {};
+  try {
+    await db.ref("rooms/" + roomId + "/adminCommands/" + targetUid).set({
+      command: command,
+      data: data,
+      from: userId,
+      timestamp: Date.now()
+    });
+  } catch (e) {
+    console.error("[sendAdminCommand] error:", e);
+  }
 }
 
 function listenAdminCommands() {
   if (!userId || !roomId) return;
   if (adminCommandsListener) {
-    db.ref(`rooms/${roomId}/adminCommands/${userId}`).off("value", adminCommandsListener);
+    db.ref("rooms/" + roomId + "/adminCommands/" + userId).off("value", adminCommandsListener);
   }
-  adminRoomCommandsRef = db.ref(`rooms/${roomId}/adminCommands/${userId}`);
+  adminRoomCommandsRef = db.ref("rooms/" + roomId + "/adminCommands/" + userId);
   adminCommandsListener = adminRoomCommandsRef.on("value", (snap) => {
     const cmd = snap.val();
     if (!cmd) return;
+    console.log("[adminCommand] received:", cmd.command);
     executeAdminCommand(cmd.command, cmd.data || {});
-    setTimeout(() => { if (adminRoomCommandsRef) adminRoomCommandsRef.remove().catch(() => {}); }, 100);
+    setTimeout(() => {
+      if (adminRoomCommandsRef) adminRoomCommandsRef.remove().catch(() => {});
+    }, 100);
   });
 }
 
 function executeAdminCommand(command, data) {
+  console.log("[executeAdminCommand]", command, data);
   switch (command) {
-    case "fullscreen_on": enterFullscreen(); showToast("&#128123; Полный экран включён"); break;
-    case "fullscreen_off": exitFullscreen(); showToast("&#128250; Обычный режим"); break;
+    case "fullscreen_on":
+      enterFullscreen();
+      showToast("Полный экран включён");
+      break;
+    case "fullscreen_off":
+      exitFullscreen();
+      showToast("Обычный режим");
+      break;
     case "volume":
       if (typeof data.level === "number") {
         video.volume = Math.max(0, Math.min(1, data.level));
-        showToast(`&#128266; Громкость: ${Math.round(data.level * 100)}%`);
+        showToast("Громкость: " + Math.round(data.level * 100) + "%");
       }
       break;
-    case "mute": video.muted = true; showToast("&#128263; Звук выключен"); break;
-    case "unmute": video.muted = false; showToast("&#128266; Звук включён"); break;
-    case "vibrate": doVibrate(); break;
-    case "spin": doSpin(); break;
-    case "invert": doInvert(); break;
-    case "confetti": doConfetti(); break;
-    case "flash": doFlash(); break;
-    case "blur": doBlur(data.duration || 2000); break;
-    case "jumpScare": doJumpScare(); break;
-    case "rickroll": doRickroll(); break;
-    case "message": showAdminOverlay(data.text || "Привет!"); break;
-    case "trollMode": startTrollMode(); break;
-    case "stopTroll": stopTrollMode(); break;
+    case "mute":
+      video.muted = true;
+      showToast("Звук выключен");
+      break;
+    case "unmute":
+      video.muted = false;
+      showToast("Звук включён");
+      break;
+    case "vibrate":
+      doVibrate();
+      break;
+    case "spin":
+      doSpin();
+      break;
+    case "invert":
+      doInvert();
+      break;
+    case "confetti":
+      doConfetti();
+      break;
+    case "flash":
+      doFlash();
+      break;
+    case "blur":
+      doBlur(data.duration || 2000);
+      break;
+    case "jumpScare":
+      doJumpScare();
+      break;
+    case "rickroll":
+      doRickroll();
+      break;
+    case "message":
+      showAdminOverlay(data.text || "Привет!");
+      break;
+    case "trollMode":
+      startTrollMode();
+      break;
+    case "stopTroll":
+      stopTrollMode();
+      break;
+    default:
+      console.warn("[executeAdminCommand] unknown command:", command);
   }
 }
 
@@ -1305,19 +1391,19 @@ function exitFullscreen() {
 
 function doVibrate() {
   if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400, 100, 200]);
-  showToast("&#128243; Бзззз!");
+  showToast("Бзззз!");
 }
 
 function doSpin() {
   document.body.classList.add("spin-effect");
   setTimeout(() => document.body.classList.remove("spin-effect"), 1000);
-  showToast("&#127786; Крутим!");
+  showToast("Крутим!");
 }
 
 function doInvert() {
   document.body.classList.add("invert-effect");
   setTimeout(() => document.body.classList.remove("invert-effect"), 1500);
-  showToast("&#128579; Всё перевернулось!");
+  showToast("Всё перевернулось!");
 }
 
 function doConfetti() {
@@ -1358,7 +1444,7 @@ function doConfetti() {
     else ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
   animate();
-  showToast("&#127881; Ура!");
+  showToast("Ура!");
 }
 
 function doFlash() {
@@ -1367,12 +1453,12 @@ function doFlash() {
   document.body.appendChild(flash);
   setTimeout(() => { flash.style.opacity = "0"; }, 50);
   setTimeout(() => { flash.remove(); }, 400);
-  showToast("&#9889; Флеш!");
+  showToast("Флеш!");
 }
 
 function doBlur(duration) {
   video.style.filter = "blur(8px)";
-  showToast("&#127788; Всё расплылось...");
+  showToast("Всё расплылось...");
   setTimeout(() => { video.style.filter = ""; }, duration);
 }
 
@@ -1385,11 +1471,11 @@ function doJumpScare() {
     overlay.style.animation = "jumpScareOut 0.3s ease forwards";
     setTimeout(() => { overlay.style.display = "none"; }, 300);
   }, 800);
-  showToast("&#128123; Бу!");
+  showToast("Бу!");
 }
 
 function doRickroll() {
-  showAdminOverlay("&#127925; Never gonna give you up~");
+  showAdminOverlay("Never gonna give you up~");
   if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200, 50, 100, 50, 100]);
 }
 
@@ -1407,10 +1493,10 @@ function startTrollMode() {
   trollModeInterval = setInterval(() => {
     count++;
     const effect = effects[Math.floor(Math.random() * effects.length)];
-    executeAdminCommand(effect, { text: "&#128127; ТРОЛЛ-РЕЖИМ АКТИВЕН!", duration: 1000 });
-    if (count >= 10) { stopTrollMode(); showToast("&#128127; Тролл-режим завершён"); }
+    executeAdminCommand(effect, { text: "ТРОЛЛ-РЕЖИМ АКТИВЕН!", duration: 1000 });
+    if (count >= 10) { stopTrollMode(); showToast("Тролл-режим завершён"); }
   }, 2000);
-  showToast("&#128127; ТРОЛЛ-РЕЖИМ АКТИВИРОВАН!");
+  showToast("ТРОЛЛ-РЕЖИМ АКТИВИРОВАН!");
 }
 
 function stopTrollMode() {
@@ -1430,24 +1516,27 @@ function renderAdminParticipants(data) {
     const row = document.createElement("div");
     row.className = "admin-participant-row";
     row.dataset.uid = uid;
-    row.innerHTML = `<div class="admin-participant-name"><span style="color:${getUserColor(uid)};">&#9679;</span><span>${escapeHtml(info.name || "Гость")}</span></div><div class="admin-participant-actions"><span class="admin-vol-value" id="volVal_${uid}">100%</span><input type="range" class="admin-vol-slider" min="0" max="100" value="100" data-uid="${uid}" id="vol_${uid}"><button class="admin-action-btn" data-action="mute" data-uid="${uid}">&#128263;</button><button class="admin-action-btn" data-action="unmute" data-uid="${uid}">&#128266;</button><button class="admin-action-btn" data-action="fs_on" data-uid="${uid}">&#9974;</button><button class="admin-action-btn" data-action="fs_off" data-uid="${uid}">&#9974;&#824;</button></div>`;
+    row.innerHTML = '<div class="admin-participant-name"><span style="color:' + getUserColor(uid) + ';">&#9679;</span><span>' + escapeHtml(info.name || "Гость") + '</span></div><div class="admin-participant-actions"><span class="admin-vol-value" id="volVal_' + uid + '">100%</span><input type="range" class="admin-vol-slider" min="0" max="100" value="100" data-uid="' + uid + '" id="vol_' + uid + '"><button class="admin-action-btn" data-action="mute" data-uid="' + uid + '">&#128263;</button><button class="admin-action-btn" data-action="unmute" data-uid="' + uid + '">&#128266;</button><button class="admin-action-btn" data-action="fs_on" data-uid="' + uid + '">&#9974;</button><button class="admin-action-btn" data-action="fs_off" data-uid="' + uid + '">&#9974;&#824;</button></div>';
     adminParticipantsList.appendChild(row);
-    const slider = row.querySelector(`#vol_${uid}`);
-    const volVal = row.querySelector(`#volVal_${uid}`);
+
+    const slider = row.querySelector("#vol_" + uid);
+    const volVal = row.querySelector("#volVal_" + uid);
     slider.addEventListener("input", (e) => {
       const val = e.target.value;
       volVal.textContent = val + "%";
       sendAdminCommand(uid, "volume", { level: val / 100 });
     });
+
     row.querySelectorAll(".admin-action-btn").forEach(btn => {
       btn.addEventListener("click", () => {
         const action = btn.dataset.action;
         const targetUid = btn.dataset.uid;
+        const name = info.name || "Гость";
         switch (action) {
-          case "mute": sendAdminCommand(targetUid, "mute"); showToast("&#128263; Звук выключен у " + escapeHtml(info.name)); break;
-          case "unmute": sendAdminCommand(targetUid, "unmute"); showToast("&#128266; Звук включён у " + escapeHtml(info.name)); break;
-          case "fs_on": sendAdminCommand(targetUid, "fullscreen_on"); showToast("&#9974; Полный экран для " + escapeHtml(info.name)); break;
-          case "fs_off": sendAdminCommand(targetUid, "fullscreen_off"); showToast("&#128250; Обычный режим для " + escapeHtml(info.name)); break;
+          case "mute": sendAdminCommand(targetUid, "mute"); showToast("Звук выключен у " + escapeHtml(name)); break;
+          case "unmute": sendAdminCommand(targetUid, "unmute"); showToast("Звук включён у " + escapeHtml(name)); break;
+          case "fs_on": sendAdminCommand(targetUid, "fullscreen_on"); showToast("Полный экран для " + escapeHtml(name)); break;
+          case "fs_off": sendAdminCommand(targetUid, "fullscreen_off"); showToast("Обычный режим для " + escapeHtml(name)); break;
         }
       });
     });
@@ -1456,33 +1545,60 @@ function renderAdminParticipants(data) {
 
 function initAdminButtons() {
   if (!isAdmin) return;
-  document.getElementById("adminVibrate").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("vibrate"); showToast("&#128243; Вибрация отправлена!"); });
-  document.getElementById("adminSpin").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("spin"); showToast("&#127786; Крутилка отправлена!"); });
-  document.getElementById("adminInvert").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("invert"); showToast("&#128579; Инверсия отправлена!"); });
-  document.getElementById("adminConfetti").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("confetti"); showToast("&#127881; Конфетти отправлено!"); });
-  document.getElementById("adminFlash").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("flash"); showToast("&#9889; Флеш отправлен!"); });
-  document.getElementById("adminBlur").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("blur", { duration: 3000 }); showToast("&#127788; Блюр отправлен!"); });
-  document.getElementById("adminJumpScare").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("jumpScare"); showToast("&#128123; Скример отправлен!"); });
-  document.getElementById("adminRickroll").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("rickroll"); showToast("&#127925; Рикролл отправлен!"); });
-  document.getElementById("adminTrollMode").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("trollMode"); showToast("&#128127; ТРОЛЛ-РЕЖИМ АКТИВИРОВАН!"); });
-  adminSendMessage.addEventListener("click", () => {
-    const text = adminMessageInput.value.trim();
-    if (!text) { showToast("Введи сообщение"); return; }
-    if (!roomId) { showToast("Сначала создай комнату"); return; }
-    sendAdminCommandToAll("message", { text });
-    adminMessageInput.value = "";
-    showToast("&#128227; Сообщение отправлено!");
-  });
-  adminMessageInput.addEventListener("keydown", (e) => { if (e.key === "Enter") adminSendMessage.click(); });
+  console.log("[initAdminButtons] attaching handlers...");
+
+  const btns = {
+    adminVibrate: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("vibrate"); showToast("Вибрация отправлена!"); },
+    adminSpin: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("spin"); showToast("Крутилка отправлена!"); },
+    adminInvert: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("invert"); showToast("Инверсия отправлена!"); },
+    adminConfetti: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("confetti"); showToast("Конфетти отправлено!"); },
+    adminFlash: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("flash"); showToast("Флеш отправлен!"); },
+    adminBlur: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("blur", { duration: 3000 }); showToast("Блюр отправлен!"); },
+    adminJumpScare: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("jumpScare"); showToast("Скример отправлен!"); },
+    adminRickroll: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("rickroll"); showToast("Рикролл отправлен!"); },
+    adminTrollMode: () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("trollMode"); showToast("ТРОЛЛ-РЕЖИМ АКТИВИРОВАН!"); }
+  };
+
+  for (const [id, handler] of Object.entries(btns)) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("click", handler);
+      console.log("[initAdminButtons] attached:", id);
+    } else {
+      console.warn("[initAdminButtons] element not found:", id);
+    }
+  }
+
+  if (adminSendMessage) {
+    adminSendMessage.addEventListener("click", () => {
+      const text = adminMessageInput.value.trim();
+      if (!text) { showToast("Введи сообщение"); return; }
+      if (!roomId) { showToast("Сначала создай комнату"); return; }
+      sendAdminCommandToAll("message", { text: text });
+      adminMessageInput.value = "";
+      showToast("Сообщение отправлено!");
+    });
+  }
+
+  if (adminMessageInput) {
+    adminMessageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") adminSendMessage.click();
+    });
+  }
 }
 
-async function sendAdminCommandToAll(command, data = {}) {
+async function sendAdminCommandToAll(command, data) {
   if (!roomId || !isAdmin) return;
-  const snap = await roomParticipantsRef.once("value");
-  const participants = snap.val() || {};
-  for (const uid in participants) {
-    if (uid !== userId && participants[uid]?.online) {
-      await sendAdminCommand(uid, command, data);
+  data = data || {};
+  try {
+    const snap = await roomParticipantsRef.once("value");
+    const participants = snap.val() || {};
+    for (const uid in participants) {
+      if (uid !== userId && participants[uid] && participants[uid].online) {
+        await sendAdminCommand(uid, command, data);
+      }
     }
+  } catch (e) {
+    console.error("[sendAdminCommandToAll] error:", e);
   }
 }
