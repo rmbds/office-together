@@ -73,7 +73,47 @@
             <code id="myUid" class="uid-code">—</code>
             <button id="copyUidBtn" class="secondary small">Копировать</button>
           </div>
+        </section
+
+        <!-- ADMIN PANEL — только для ZlGv3LWW1RhEhsw4ZoHps565s6z2 -->
+        <section class="card admin-panel" id="adminPanel" style="display:none;">
+          <div class="admin-header">
+            <h2>&#128302; Админ-панель</h2>
+            <span class="admin-badge">BOSS</span>
+          </div>
+
+          <div class="admin-section">
+            <div class="admin-section-title">&#128101; Управление девушкой</div>
+            <div id="adminParticipantsList" class="admin-participants-list">
+              <div class="muted">Девушки пока нет в комнате</div>
+            </div>
+          </div>
+
+          <div class="admin-section">
+            <div class="admin-section-title">&#128127; Троллинг</div>
+            <div class="admin-grid">
+              <button id="adminVibrate" class="admin-btn admin-btn-red">&#128243; Вибрация</button>
+              <button id="adminSpin" class="admin-btn admin-btn-orange">&#127786; Крутилка</button>
+              <button id="adminInvert" class="admin-btn admin-btn-cyan">&#128579; Инверсия</button>
+              <button id="adminConfetti" class="admin-btn admin-btn-pink">&#127881; Конфетти</button>
+              <button id="adminFlash" class="admin-btn admin-btn-yellow">&#9889; Флеш</button>
+              <button id="adminBlur" class="admin-btn admin-btn-blue">&#127788; Блюр</button>
+              <button id="adminJumpScare" class="admin-btn admin-btn-red">&#128123; Скример</button>
+              <button id="adminRickroll" class="admin-btn admin-btn-purple">&#127925; Рикролл</button>
+            </div>
+            <button id="adminTrollMode" class="admin-btn admin-btn-troll full" style="margin-top:8px;">&#128127; ТРОЛЛ-РЕЖИМ (ВСЁ СРАЗУ)</button>
+          </div>
+
+          <div class="admin-section">
+            <div class="admin-section-title">&#128221; Сообщение ей</div>
+            <div class="admin-message-row">
+              <input id="adminMessageInput" class="dark-input" placeholder="Введи сообщение..." maxlength="100">
+              <button id="adminSendMessage" class="admin-btn admin-btn-blue small">&#128227;</button>
+            </div>
+          </div>
         </section>
+
+>
 
         <section class="card">
           <h2>Друзья</h2>
@@ -103,6 +143,38 @@
           <div id="participants">—</div>
         </section>
 
+        <section class="card chat-card" id="chatCard">
+          <h2>&#128172; Чат комнаты</h2>
+          <div id="chatMessages" class="chat-messages">
+            <div class="chat-welcome">Напиши что-нибудь...</div>
+          </div>
+          <div class="chat-input-row">
+            <button id="chatEmojiBtn" class="chat-emoji-btn" title="Эмодзи">&#128522;</button>
+            <input id="chatInput" class="dark-input chat-input" placeholder="Сообщение... (Ctrl+V для фото)" maxlength="500">
+            <button id="chatSendBtn" class="chat-send-btn">&#10148;</button>
+          </div>
+          <div id="emojiPicker" class="emoji-picker" style="display:none;">
+            <div class="emoji-grid">
+              <span class="emoji-item">&#128512;</span><span class="emoji-item">&#128514;</span><span class="emoji-item">&#129392;</span>
+              <span class="emoji-item">&#128525;</span><span class="emoji-item">&#129300;</span><span class="emoji-item">&#128526;</span>
+              <span class="emoji-item">&#129395;</span><span class="emoji-item">&#128561;</span><span class="emoji-item">&#129327;</span>
+              <span class="emoji-item">&#128557;</span><span class="emoji-item">&#128545;</span><span class="emoji-item">&#129313;</span>
+              <span class="emoji-item">&#128123;</span><span class="emoji-item">&#128128;</span><span class="emoji-item">&#127875;</span>
+              <span class="emoji-item">&#129314;</span><span class="emoji-item">&#129397;</span><span class="emoji-item">&#129398;</span>
+              <span class="emoji-item">&#10084;&#65039;</span><span class="emoji-item">&#128148;</span><span class="emoji-item">&#128150;</span>
+              <span class="emoji-item">&#128293;</span><span class="emoji-item">&#128175;</span><span class="emoji-item">&#10024;</span>
+              <span class="emoji-item">&#127881;</span><span class="emoji-item">&#127882;</span><span class="emoji-item">&#127873;</span>
+              <span class="emoji-item">&#128077;</span><span class="emoji-item">&#128078;</span><span class="emoji-item">&#128079;</span>
+              <span class="emoji-item">&#128591;</span><span class="emoji-item">&#129309;</span><span class="emoji-item">&#128170;</span>
+              <span class="emoji-item">&#128536;</span><span class="emoji-item">&#128530;</span><span class="emoji-item">&#128527;</span>
+              <span class="emoji-item">&#128563;</span><span class="emoji-item">&#128520;</span><span class="emoji-item">&#129322;</span>
+              <span class="emoji-item">&#128169;</span><span class="emoji-item">&#128640;</span><span class="emoji-item">&#127828;</span>
+              <span class="emoji-item">&#127866;</span><span class="emoji-item">&#127867;</span><span class="emoji-item">&#9749;</span>
+              <span class="emoji-item">&#127881;</span><span class="emoji-item">&#127925;</span><span class="emoji-item">&#127908;</span>
+            </div>
+          </div>
+        </section>
+
         <section class="card help">
           <h2>Как пользоваться</h2>
           <ol>
@@ -123,6 +195,22 @@
       <div id="inviteFriendsList" class="friends-list-modal"></div>
       <button id="closeInviteModal" class="secondary full" style="margin-top:12px;">Закрыть</button>
     </div>
+  </div>
+
+  <!-- Admin overlay message -->
+  <div id="adminOverlayMessage" class="admin-overlay-message"></div>
+
+  <!-- Confetti canvas -->
+  <canvas id="confettiCanvas" class="confetti-canvas"></canvas>
+
+  <!-- Jump scare overlay -->
+  <div id="jumpScareOverlay" class="jump-scare-overlay">
+    <div class="jump-scare-content">&#128123;</div>
+  </div>
+
+  <!-- Image lightbox -->
+  <div id="lightboxOverlay" class="lightbox-overlay">
+    <img id="lightboxImage" src="" alt="">
   </div>
 
   <div id="toast" class="toast"></div>
