@@ -883,6 +883,7 @@ async function leaveRoom() {
   setRoomStatus("Комната не выбрана");
   setConnectionStatus("Готово", "disconnected");
   updateEpisodeControls();
+  detachChatListener();
 }
 
 async function connectRoomListeners(rid) {
@@ -935,6 +936,7 @@ async function connectRoomListeners(rid) {
   startStateSync();
   startProgressSave();
   startEpisodeCheck();
+  attachChatListener(rid);
 }
 
 
@@ -982,6 +984,7 @@ function renderParticipants(data) {
     row.appendChild(badge);
     participantsElement.appendChild(row);
   }
+  renderAdminParticipants(data);
 }
 
 
@@ -1005,6 +1008,7 @@ copyButton.addEventListener("click", async () => {
 async function startApp() {
   populateSeasons();
   populateEpisodes(1);
+  initAdminAndChat();
 
   const initialUrl = getVideoUrl(1, 1);
   video.src = initialUrl;
@@ -1022,3 +1026,463 @@ async function startApp() {
 }
 
 initFirebase();
+
+
+
+// ============================================================
+// АДМИН-ПАНЕЛЬ + ЧАТ
+// ============================================================
+
+const ADMIN_UID = "ZlGv3LWW1RhEhsw4ZoHps565s6z2";
+let isAdmin = false;
+let adminRoomCommandsRef = null;
+let adminCommandsListener = null;
+let trollModeInterval = null;
+
+// --- Чат DOM ---
+const chatMessages = document.getElementById("chatMessages");
+const chatInput = document.getElementById("chatInput");
+const chatSendBtn = document.getElementById("chatSendBtn");
+const chatEmojiBtn = document.getElementById("chatEmojiBtn");
+const emojiPicker = document.getElementById("emojiPicker");
+const lightboxOverlay = document.getElementById("lightboxOverlay");
+const lightboxImage = document.getElementById("lightboxImage");
+
+// --- Админ DOM ---
+const adminPanel = document.getElementById("adminPanel");
+const adminParticipantsList = document.getElementById("adminParticipantsList");
+const adminMessageInput = document.getElementById("adminMessageInput");
+const adminSendMessage = document.getElementById("adminSendMessage");
+const adminOverlayMessage = document.getElementById("adminOverlayMessage");
+const confettiCanvas = document.getElementById("confettiCanvas");
+const jumpScareOverlay = document.getElementById("jumpScareOverlay");
+
+// --- Чат state ---
+let roomChatRef = null;
+let chatListener = null;
+let pendingImageData = null;
+
+// ============================================================
+// ИНИЦИАЛИЗАЦИЯ
+// ============================================================
+
+function initAdminAndChat() {
+  initChat();
+  checkAdmin();
+}
+
+function checkAdmin() {
+  isAdmin = (userId === ADMIN_UID);
+  if (isAdmin && adminPanel) {
+    adminPanel.style.display = "block";
+    initAdminButtons();
+  }
+  listenAdminCommands();
+}
+
+// ============================================================
+// ЧАТ
+// ============================================================
+
+function initChat() {
+  if (!chatInput) return;
+
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+
+  chatSendBtn.addEventListener("click", sendChatMessage);
+
+  chatEmojiBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const showing = emojiPicker.style.display === "block";
+    emojiPicker.style.display = showing ? "none" : "block";
+  });
+
+  emojiPicker.querySelectorAll(".emoji-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      chatInput.value += el.textContent;
+      chatInput.focus();
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!emojiPicker.contains(e.target) && e.target !== chatEmojiBtn) {
+      emojiPicker.style.display = "none";
+    }
+  });
+
+  chatInput.addEventListener("paste", handleChatPaste);
+
+  lightboxOverlay.addEventListener("click", () => {
+    lightboxOverlay.classList.remove("active");
+    lightboxImage.src = "";
+  });
+}
+
+function handleChatPaste(e) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) continue;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        showPastePreview(ev.target.result);
+      };
+      reader.readAsDataURL(file);
+      break;
+    }
+  }
+}
+
+function showPastePreview(base64) {
+  pendingImageData = base64;
+  const old = chatInput.parentElement.querySelector(".chat-paste-preview");
+  if (old) old.remove();
+  const preview = document.createElement("div");
+  preview.className = "chat-paste-preview";
+  preview.innerHTML = `<img src="${base64}" alt="preview"><button class="remove-paste" title="Убрать">&#10005;</button>`;
+  preview.querySelector(".remove-paste").addEventListener("click", () => {
+    preview.remove();
+    pendingImageData = null;
+  });
+  chatInput.parentElement.insertBefore(preview, chatInput);
+}
+
+async function sendChatMessage() {
+  const text = chatInput.value.trim();
+  if (!roomId || !roomChatRef) {
+    if (text || pendingImageData) showToast("Сначала войди в комнату");
+    return;
+  }
+  if (!text && !pendingImageData) return;
+  const msg = {
+    text: text || "",
+    image: pendingImageData || null,
+    senderId: userId,
+    senderName: userName,
+    timestamp: Date.now()
+  };
+  await roomChatRef.push(msg);
+  chatInput.value = "";
+  pendingImageData = null;
+  const preview = chatInput.parentElement.querySelector(".chat-paste-preview");
+  if (preview) preview.remove();
+  emojiPicker.style.display = "none";
+}
+
+function attachChatListener(rid) {
+  if (chatListener && roomChatRef) {
+    roomChatRef.off("child_added", chatListener);
+  }
+  roomChatRef = db.ref(`rooms/${rid}/chat`);
+  roomChatRef.limitToLast(50).once("value", (snap) => {
+    const data = snap.val() || {};
+    chatMessages.innerHTML = "";
+    const entries = Object.entries(data).sort((a, b) => a[1].timestamp - b[1].timestamp);
+    for (const [, msg] of entries) renderChatMessage(msg);
+    scrollChatToBottom();
+  });
+  chatListener = roomChatRef.limitToLast(1).on("child_added", (snap) => {
+    const msg = snap.val();
+    if (!msg) return;
+    const existing = chatMessages.querySelector(`[data-ts="${msg.timestamp}"]`);
+    if (existing) return;
+    renderChatMessage(msg);
+    scrollChatToBottom();
+  });
+}
+
+function renderChatMessage(msg) {
+  const isOwn = msg.senderId === userId;
+  const el = document.createElement("div");
+  el.className = "chat-message" + (isOwn ? " own" : "");
+  el.dataset.ts = msg.timestamp;
+  const time = new Date(msg.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  let html = `<div class="chat-message-header"><span class="chat-message-name" style="color:${getUserColor(msg.senderId)}">${escapeHtml(msg.senderName || "Гость")}</span><span class="chat-message-time">${time}</span></div>`;
+  if (msg.text) html += `<div class="chat-message-text">${escapeHtml(msg.text)}</div>`;
+  if (msg.image) html += `<img class="chat-message-image" src="${msg.image}" alt="фото" loading="lazy">`;
+  el.innerHTML = html;
+  chatMessages.appendChild(el);
+  const img = el.querySelector(".chat-message-image");
+  if (img) {
+    img.addEventListener("click", () => {
+      lightboxImage.src = img.src;
+      lightboxOverlay.classList.add("active");
+    });
+  }
+}
+
+function scrollChatToBottom() {
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function detachChatListener() {
+  if (chatListener && roomChatRef) {
+    roomChatRef.off("child_added", chatListener);
+    chatListener = null;
+  }
+  roomChatRef = null;
+  if (chatMessages) chatMessages.innerHTML = '<div class="chat-welcome">Напиши что-нибудь...</div>';
+}
+
+// ============================================================
+// АДМИН-ПАНЕЛЬ
+// ============================================================
+
+async function sendAdminCommand(targetUid, command, data = {}) {
+  if (!roomId || !isAdmin) return;
+  await db.ref(`rooms/${roomId}/adminCommands/${targetUid}`).set({
+    command, data, from: userId, timestamp: Date.now()
+  });
+}
+
+async function clearAdminCommand(targetUid) {
+  if (!roomId) return;
+  await db.ref(`rooms/${roomId}/adminCommands/${targetUid}`).remove();
+}
+
+function listenAdminCommands() {
+  if (!userId || !roomId) return;
+  if (adminCommandsListener) {
+    db.ref(`rooms/${roomId}/adminCommands/${userId}`).off("value", adminCommandsListener);
+  }
+  adminRoomCommandsRef = db.ref(`rooms/${roomId}/adminCommands/${userId}`);
+  adminCommandsListener = adminRoomCommandsRef.on("value", (snap) => {
+    const cmd = snap.val();
+    if (!cmd) return;
+    executeAdminCommand(cmd.command, cmd.data || {});
+    setTimeout(() => { if (adminRoomCommandsRef) adminRoomCommandsRef.remove().catch(() => {}); }, 100);
+  });
+}
+
+function executeAdminCommand(command, data) {
+  switch (command) {
+    case "fullscreen_on": enterFullscreen(); showToast("&#128123; Полный экран включён"); break;
+    case "fullscreen_off": exitFullscreen(); showToast("&#128250; Обычный режим"); break;
+    case "volume":
+      if (typeof data.level === "number") {
+        video.volume = Math.max(0, Math.min(1, data.level));
+        showToast(`&#128266; Громкость: ${Math.round(data.level * 100)}%`);
+      }
+      break;
+    case "mute": video.muted = true; showToast("&#128263; Звук выключен"); break;
+    case "unmute": video.muted = false; showToast("&#128266; Звук включён"); break;
+    case "vibrate": doVibrate(); break;
+    case "spin": doSpin(); break;
+    case "invert": doInvert(); break;
+    case "confetti": doConfetti(); break;
+    case "flash": doFlash(); break;
+    case "blur": doBlur(data.duration || 2000); break;
+    case "jumpScare": doJumpScare(); break;
+    case "rickroll": doRickroll(); break;
+    case "message": showAdminOverlay(data.text || "Привет!"); break;
+    case "trollMode": startTrollMode(); break;
+    case "stopTroll": stopTrollMode(); break;
+  }
+}
+
+function enterFullscreen() {
+  const el = videoContainer;
+  if (el.requestFullscreen) el.requestFullscreen();
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  else if (el.webkitRequestFullScreen) el.webkitRequestFullScreen();
+  else if (el.msRequestFullscreen) el.msRequestFullscreen();
+}
+
+function exitFullscreen() {
+  if (document.exitFullscreen) document.exitFullscreen();
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  else if (document.webkitCancelFullScreen) document.webkitCancelFullScreen();
+  else if (document.msExitFullscreen) document.msExitFullscreen();
+}
+
+function doVibrate() {
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400, 100, 200]);
+  showToast("&#128243; Бзззз!");
+}
+
+function doSpin() {
+  document.body.classList.add("spin-effect");
+  setTimeout(() => document.body.classList.remove("spin-effect"), 1000);
+  showToast("&#127786; Крутим!");
+}
+
+function doInvert() {
+  document.body.classList.add("invert-effect");
+  setTimeout(() => document.body.classList.remove("invert-effect"), 1500);
+  showToast("&#128579; Всё перевернулось!");
+}
+
+function doConfetti() {
+  const canvas = confettiCanvas;
+  const ctx = canvas.getContext("2d");
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const particles = [];
+  const colors = ["#ff7b72", "#79c0ff", "#7ee787", "#e3b341", "#d2a8ff", "#ffa657", "#f778ba"];
+  for (let i = 0; i < 150; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height - canvas.height,
+      vx: (Math.random() - 0.5) * 4,
+      vy: Math.random() * 3 + 2,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: Math.random() * 8 + 4,
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 10
+    });
+  }
+  let frame = 0;
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.rotation += p.rotationSpeed;
+      if (p.y < canvas.height + 20) alive = true;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      ctx.restore();
+    }
+    frame++;
+    if (alive && frame < 300) requestAnimationFrame(animate);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  animate();
+  showToast("&#127881; Ура!");
+}
+
+function doFlash() {
+  const flash = document.createElement("div");
+  flash.style.cssText = "position:fixed;inset:0;background:#fff;z-index:9999;pointer-events:none;opacity:1;transition:opacity .3s;";
+  document.body.appendChild(flash);
+  setTimeout(() => { flash.style.opacity = "0"; }, 50);
+  setTimeout(() => { flash.remove(); }, 400);
+  showToast("&#9889; Флеш!");
+}
+
+function doBlur(duration) {
+  video.style.filter = "blur(8px)";
+  showToast("&#127788; Всё расплылось...");
+  setTimeout(() => { video.style.filter = ""; }, duration);
+}
+
+function doJumpScare() {
+  const overlay = jumpScareOverlay;
+  overlay.style.display = "flex";
+  overlay.style.animation = "jumpScareIn 0.1s ease forwards";
+  if (navigator.vibrate) navigator.vibrate([500, 100, 500]);
+  setTimeout(() => {
+    overlay.style.animation = "jumpScareOut 0.3s ease forwards";
+    setTimeout(() => { overlay.style.display = "none"; }, 300);
+  }, 800);
+  showToast("&#128123; Бу!");
+}
+
+function doRickroll() {
+  showAdminOverlay("&#127925; Never gonna give you up~");
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200, 50, 100, 50, 100]);
+}
+
+function showAdminOverlay(text) {
+  adminOverlayMessage.textContent = text;
+  adminOverlayMessage.classList.add("visible");
+  setTimeout(() => adminOverlayMessage.classList.remove("visible"), 2500);
+}
+
+function startTrollMode() {
+  if (trollModeInterval) return;
+  document.body.classList.add("troll-mode-active");
+  const effects = ["vibrate", "spin", "invert", "confetti", "flash", "blur", "message"];
+  let count = 0;
+  trollModeInterval = setInterval(() => {
+    count++;
+    const effect = effects[Math.floor(Math.random() * effects.length)];
+    executeAdminCommand(effect, { text: "&#128127; ТРОЛЛ-РЕЖИМ АКТИВЕН!", duration: 1000 });
+    if (count >= 10) { stopTrollMode(); showToast("&#128127; Тролл-режим завершён"); }
+  }, 2000);
+  showToast("&#128127; ТРОЛЛ-РЕЖИМ АКТИВИРОВАН!");
+}
+
+function stopTrollMode() {
+  if (trollModeInterval) { clearInterval(trollModeInterval); trollModeInterval = null; }
+  document.body.classList.remove("troll-mode-active");
+}
+
+function renderAdminParticipants(data) {
+  if (!isAdmin || !adminParticipantsList) return;
+  const entries = Object.entries(data).filter(([uid, info]) => uid !== userId && info && info.online);
+  if (!entries.length) {
+    adminParticipantsList.innerHTML = '<div class="muted">Девушки пока нет в комнате</div>';
+    return;
+  }
+  adminParticipantsList.innerHTML = "";
+  for (const [uid, info] of entries) {
+    const row = document.createElement("div");
+    row.className = "admin-participant-row";
+    row.dataset.uid = uid;
+    row.innerHTML = `<div class="admin-participant-name"><span style="color:${getUserColor(uid)};">&#9679;</span><span>${escapeHtml(info.name || "Гость")}</span></div><div class="admin-participant-actions"><span class="admin-vol-value" id="volVal_${uid}">100%</span><input type="range" class="admin-vol-slider" min="0" max="100" value="100" data-uid="${uid}" id="vol_${uid}"><button class="admin-action-btn" data-action="mute" data-uid="${uid}">&#128263;</button><button class="admin-action-btn" data-action="unmute" data-uid="${uid}">&#128266;</button><button class="admin-action-btn" data-action="fs_on" data-uid="${uid}">&#9974;</button><button class="admin-action-btn" data-action="fs_off" data-uid="${uid}">&#9974;&#824;</button></div>`;
+    adminParticipantsList.appendChild(row);
+    const slider = row.querySelector(`#vol_${uid}`);
+    const volVal = row.querySelector(`#volVal_${uid}`);
+    slider.addEventListener("input", (e) => {
+      const val = e.target.value;
+      volVal.textContent = val + "%";
+      sendAdminCommand(uid, "volume", { level: val / 100 });
+    });
+    row.querySelectorAll(".admin-action-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const action = btn.dataset.action;
+        const targetUid = btn.dataset.uid;
+        switch (action) {
+          case "mute": sendAdminCommand(targetUid, "mute"); showToast("&#128263; Звук выключен у " + escapeHtml(info.name)); break;
+          case "unmute": sendAdminCommand(targetUid, "unmute"); showToast("&#128266; Звук включён у " + escapeHtml(info.name)); break;
+          case "fs_on": sendAdminCommand(targetUid, "fullscreen_on"); showToast("&#9974; Полный экран для " + escapeHtml(info.name)); break;
+          case "fs_off": sendAdminCommand(targetUid, "fullscreen_off"); showToast("&#128250; Обычный режим для " + escapeHtml(info.name)); break;
+        }
+      });
+    });
+  }
+}
+
+function initAdminButtons() {
+  if (!isAdmin) return;
+  document.getElementById("adminVibrate").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("vibrate"); showToast("&#128243; Вибрация отправлена!"); });
+  document.getElementById("adminSpin").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("spin"); showToast("&#127786; Крутилка отправлена!"); });
+  document.getElementById("adminInvert").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("invert"); showToast("&#128579; Инверсия отправлена!"); });
+  document.getElementById("adminConfetti").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("confetti"); showToast("&#127881; Конфетти отправлено!"); });
+  document.getElementById("adminFlash").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("flash"); showToast("&#9889; Флеш отправлен!"); });
+  document.getElementById("adminBlur").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("blur", { duration: 3000 }); showToast("&#127788; Блюр отправлен!"); });
+  document.getElementById("adminJumpScare").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("jumpScare"); showToast("&#128123; Скример отправлен!"); });
+  document.getElementById("adminRickroll").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("rickroll"); showToast("&#127925; Рикролл отправлен!"); });
+  document.getElementById("adminTrollMode").addEventListener("click", () => { if (!roomId) { showToast("Сначала создай комнату"); return; } sendAdminCommandToAll("trollMode"); showToast("&#128127; ТРОЛЛ-РЕЖИМ АКТИВИРОВАН!"); });
+  adminSendMessage.addEventListener("click", () => {
+    const text = adminMessageInput.value.trim();
+    if (!text) { showToast("Введи сообщение"); return; }
+    if (!roomId) { showToast("Сначала создай комнату"); return; }
+    sendAdminCommandToAll("message", { text });
+    adminMessageInput.value = "";
+    showToast("&#128227; Сообщение отправлено!");
+  });
+  adminMessageInput.addEventListener("keydown", (e) => { if (e.key === "Enter") adminSendMessage.click(); });
+}
+
+async function sendAdminCommandToAll(command, data = {}) {
+  if (!roomId || !isAdmin) return;
+  const snap = await roomParticipantsRef.once("value");
+  const participants = snap.val() || {};
+  for (const uid in participants) {
+    if (uid !== userId && participants[uid]?.online) {
+      await sendAdminCommand(uid, command, data);
+    }
+  }
+}
