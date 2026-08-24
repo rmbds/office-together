@@ -11,6 +11,51 @@
 <base target="_blank">
 </head>
 <body>
+  <!-- Left Admin Drawer -->
+  <div id="adminDrawer" class="admin-drawer">
+    <div class="admin-drawer-inner">
+      <div class="admin-drawer-header">
+        <h2>&#128302; Админ-панель</h2>
+        <span class="admin-badge">BOSS</span>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-section-title">&#128101; Управление девушкой</div>
+        <div id="adminParticipantsList" class="admin-participants-list">
+          <div class="muted">Девушки пока нет в комнате</div>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-section-title">&#128127; Троллинг</div>
+        <div class="admin-grid">
+          <button id="adminVibrate" class="admin-btn admin-btn-red">&#128243; Вибрация</button>
+          <button id="adminSpin" class="admin-btn admin-btn-orange">&#127786; Крутилка</button>
+          <button id="adminInvert" class="admin-btn admin-btn-cyan">&#128579; Инверсия</button>
+          <button id="adminConfetti" class="admin-btn admin-btn-pink">&#127881; Конфетти</button>
+          <button id="adminFlash" class="admin-btn admin-btn-yellow">&#9889; Флеш</button>
+          <button id="adminBlur" class="admin-btn admin-btn-blue">&#127788; Блюр</button>
+          <button id="adminJumpScare" class="admin-btn admin-btn-red">&#128123; Скример</button>
+          <button id="adminRickroll" class="admin-btn admin-btn-purple">&#127925; Рикролл</button>
+        </div>
+        <button id="adminTrollMode" class="admin-btn admin-btn-troll full" style="margin-top:8px;">&#128127; ТРОЛЛ-РЕЖИМ (ВСЁ СРАЗУ)</button>
+      </div>
+
+      <div class="admin-section">
+        <div class="admin-section-title">&#128221; Сообщение ей</div>
+        <div class="admin-message-row">
+          <input id="adminMessageInput" class="dark-input" placeholder="Введи сообщение..." maxlength="100">
+          <button id="adminSendMessage" class="admin-btn admin-btn-blue small">&#128227;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Toggle Button (only for admin) -->
+  <button id="adminToggleBtn" class="admin-toggle-btn" style="display:none;" title="Админ-панель">
+    &#128302;
+  </button>
+
   <div class="app">
     <header class="header">
       <div>
@@ -46,10 +91,10 @@
         <div class="episode-panel">
           <div class="episode-info" id="episodeLabel">Сезон 1, Серия 1</div>
           <div class="episode-controls">
-            <button id="prevEpisodeBtn" class="secondary" disabled>←</button>
+            <button id="prevEpisodeBtn" class="secondary" disabled>&#8592;</button>
             <select id="seasonSelect" class="dark-select" disabled></select>
             <select id="episodeSelect" class="dark-select" disabled></select>
-            <button id="nextEpisodeBtn" class="secondary" disabled>→</button>
+            <button id="nextEpisodeBtn" class="secondary" disabled>&#8594;</button>
           </div>
         </div>
 
@@ -62,87 +107,7 @@
       </section>
 
       <aside class="sidebar">
-        <section class="card">
-          <h2>Мой профиль</h2>
-          <div class="profile-row">
-            <input id="nicknameInput" class="dark-input" placeholder="Введи ник" maxlength="30">
-            <button id="saveNicknameBtn" class="secondary">Сохранить</button>
-          </div>
-          <div class="uid-row">
-            <span class="muted">Твой ID:</span>
-            <code id="myUid" class="uid-code">—</code>
-            <button id="copyUidBtn" class="secondary small">Копировать</button>
-          </div>
-        </section
-
-        <!-- ADMIN PANEL — только для ZlGv3LWW1RhEhsw4ZoHps565s6z2 -->
-        <section class="card admin-panel" id="adminPanel" style="display:none;">
-          <div class="admin-header">
-            <h2>&#128302; Админ-панель</h2>
-            <span class="admin-badge">BOSS</span>
-          </div>
-
-          <div class="admin-section">
-            <div class="admin-section-title">&#128101; Управление девушкой</div>
-            <div id="adminParticipantsList" class="admin-participants-list">
-              <div class="muted">Девушки пока нет в комнате</div>
-            </div>
-          </div>
-
-          <div class="admin-section">
-            <div class="admin-section-title">&#128127; Троллинг</div>
-            <div class="admin-grid">
-              <button id="adminVibrate" class="admin-btn admin-btn-red">&#128243; Вибрация</button>
-              <button id="adminSpin" class="admin-btn admin-btn-orange">&#127786; Крутилка</button>
-              <button id="adminInvert" class="admin-btn admin-btn-cyan">&#128579; Инверсия</button>
-              <button id="adminConfetti" class="admin-btn admin-btn-pink">&#127881; Конфетти</button>
-              <button id="adminFlash" class="admin-btn admin-btn-yellow">&#9889; Флеш</button>
-              <button id="adminBlur" class="admin-btn admin-btn-blue">&#127788; Блюр</button>
-              <button id="adminJumpScare" class="admin-btn admin-btn-red">&#128123; Скример</button>
-              <button id="adminRickroll" class="admin-btn admin-btn-purple">&#127925; Рикролл</button>
-            </div>
-            <button id="adminTrollMode" class="admin-btn admin-btn-troll full" style="margin-top:8px;">&#128127; ТРОЛЛ-РЕЖИМ (ВСЁ СРАЗУ)</button>
-          </div>
-
-          <div class="admin-section">
-            <div class="admin-section-title">&#128221; Сообщение ей</div>
-            <div class="admin-message-row">
-              <input id="adminMessageInput" class="dark-input" placeholder="Введи сообщение..." maxlength="100">
-              <button id="adminSendMessage" class="admin-btn admin-btn-blue small">&#128227;</button>
-            </div>
-          </div>
-        </section>
-
->
-
-        <section class="card">
-          <h2>Друзья</h2>
-          <div class="friend-add">
-            <input id="friendUidInput" class="dark-input" placeholder="ID друга">
-            <button id="addFriendBtn" class="secondary">Добавить</button>
-          </div>
-          <div id="friendsList" class="friends-list">
-            <div class="muted">Пока нет друзей</div>
-          </div>
-        </section>
-
-        <section class="card" id="invitesCard" style="display:none;">
-          <h2>📩 Приглашения</h2>
-          <div id="invitesList" class="invites-list"></div>
-        </section>
-
-        <section class="card">
-          <h2>Комната</h2>
-          <div id="roomCode" class="room-code">------</div>
-          <button id="copyButton" class="secondary full" disabled>Скопировать ссылку</button>
-          <button id="inviteFriendBtn" class="secondary full" disabled style="margin-top:8px;">Пригласить друга</button>
-        </section>
-
-        <section class="card">
-          <h2>Участники</h2>
-          <div id="participants">—</div>
-        </section>
-
+        <!-- CHAT — always visible at top -->
         <section class="card chat-card" id="chatCard">
           <h2>&#128172; Чат комнаты</h2>
           <div id="chatMessages" class="chat-messages">
@@ -175,15 +140,45 @@
           </div>
         </section>
 
-        <section class="card help">
-          <h2>Как пользоваться</h2>
-          <ol>
-            <li>Введи ник и сохрани.</li>
-            <li>Создай комнату.</li>
-            <li>Скопируй ссылку или пригласи друга.</li>
-            <li>Любой может ставить на паузу, запускать и менять серию.</li>
-            <li>Нажми 🔴 над плеером, чтобы показать момент пальцем/мышью.</li>
-          </ol>
+        <section class="card">
+          <h2>Мой профиль</h2>
+          <div class="profile-row">
+            <input id="nicknameInput" class="dark-input" placeholder="Введи ник" maxlength="30">
+            <button id="saveNicknameBtn" class="secondary">Сохранить</button>
+          </div>
+          <div class="uid-row">
+            <span class="muted">Твой ID:</span>
+            <code id="myUid" class="uid-code">—</code>
+            <button id="copyUidBtn" class="secondary small">Копировать</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Друзья</h2>
+          <div class="friend-add">
+            <input id="friendUidInput" class="dark-input" placeholder="ID друга">
+            <button id="addFriendBtn" class="secondary">Добавить</button>
+          </div>
+          <div id="friendsList" class="friends-list">
+            <div class="muted">Пока нет друзей</div>
+          </div>
+        </section>
+
+        <section class="card" id="invitesCard" style="display:none;">
+          <h2>&#128235; Приглашения</h2>
+          <div id="invitesList" class="invites-list"></div>
+        </section>
+
+        <section class="card">
+          <h2>Комната</h2>
+          <div id="roomCode" class="room-code">------</div>
+          <button id="copyButton" class="secondary full" disabled>Скопировать ссылку</button>
+          <button id="inviteFriendBtn" class="secondary full" disabled style="margin-top:8px;">Пригласить друга</button>
+        </section>
+
+        <section class="card">
+          <h2>Участники</h2>
+          <div id="participants">—</div>
         </section>
       </aside>
     </main>
